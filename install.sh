@@ -2,10 +2,16 @@
 set -e
 
 DOTFILES="$HOME/code/dotfiles"
+LOCAL_BIN="$HOME/.local/bin"
 
-# nvim 不走 apt（apt 只有 0.9.5，太舊）；改用 AppImage 裝到 ~/.local/bin，見 install_nvim
-NVIM_VERSION="v0.12.4"
+# ============================================================
+# 版本鎖定（確保跨機器安裝到一致的版本）
+# ============================================================
+NVIM_VERSION="v0.12.4"       # Neovim（AppImage，見 install_nvim）
+NERD_FONT_VERSION="v3.4.0"   # JetBrainsMono Nerd Font（見 install_nerd_font）
+# Neovim 外掛的版本鎖定在 nvim/lazy-lock.json（見主流程最後的 lazy restore）
 
+# 走 apt 的相依套件（需自行安裝，缺少會中止並提示）
 declare -A APT_PACKAGE=(
   [ghostty]=ghostty
   [tmux]=tmux
@@ -14,57 +20,53 @@ declare -A APT_PACKAGE=(
   [curl]=curl
 )
 
+# ============================================================
+# 函式定義
+# ============================================================
+
+# 檢查 apt 相依套件是否齊全，缺少就列出安裝指令並中止
 check_deps() {
   local missing=()
-  for cmd in ghostty tmux tree git curl; do
-    command -v "$cmd" >/dev/null 2>&1 || missing+=("$cmd")
+  for cmd in "${!APT_PACKAGE[@]}"; do
+    command -v "$cmd" >/dev/null 2>&1 || missing+=("${APT_PACKAGE[$cmd]}")
   done
   if [ ${#missing[@]} -gt 0 ]; then
     echo "缺少以下套件，請先手動安裝後再重跑 install.sh："
-    local pkgs=()
-    for cmd in "${missing[@]}"; do
-      pkgs+=("${APT_PACKAGE[$cmd]}")
-    done
-    echo "  sudo apt install ${pkgs[*]}"
+    echo "  sudo apt install ${missing[*]}"
     exit 1
   fi
 }
 
-check_deps
-
+# 安裝鎖定版本的 JetBrainsMono Nerd Font 到 ~/.local/share/fonts（供 nvim-web-devicons 圖示用）
 install_nerd_font() {
   if fc-list | grep -q "JetBrainsMono Nerd Font Mono"; then
     return
   fi
-  echo "安裝 JetBrainsMono Nerd Font..."
+  echo "安裝 JetBrainsMono Nerd Font $NERD_FONT_VERSION..."
   local tmp
   tmp=$(mktemp -d)
   curl -sL -o "$tmp/JetBrainsMono.tar.xz" \
-    "https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/JetBrainsMono.tar.xz"
+    "https://github.com/ryanoasis/nerd-fonts/releases/download/$NERD_FONT_VERSION/JetBrainsMono.tar.xz"
   mkdir -p "$HOME/.local/share/fonts"
   tar -xf "$tmp/JetBrainsMono.tar.xz" -C "$HOME/.local/share/fonts"
   fc-cache -f "$HOME/.local/share/fonts" >/dev/null 2>&1
   rm -rf "$tmp"
 }
 
-install_nerd_font
-
+# 用官方 AppImage 裝鎖定版本的 nvim 到 ~/.local/bin（不需 sudo，蓋過 apt 的舊版）
 install_nvim() {
-  # 用官方 AppImage 裝指定版本的 nvim 到 ~/.local/bin（不需 sudo，蓋過 apt 的舊版）
-  local bin="$HOME/.local/bin"
-  if [ -x "$bin/nvim" ] && "$bin/nvim" --version 2>/dev/null | grep -q "$NVIM_VERSION"; then
+  if [ -x "$LOCAL_BIN/nvim" ] && "$LOCAL_BIN/nvim" --version 2>/dev/null | grep -q "$NVIM_VERSION"; then
     return
   fi
   echo "安裝 Neovim $NVIM_VERSION AppImage..."
-  mkdir -p "$bin"
-  curl -sL -o "$bin/nvim.appimage" \
+  mkdir -p "$LOCAL_BIN"
+  curl -sL -o "$LOCAL_BIN/nvim.appimage" \
     "https://github.com/neovim/neovim/releases/download/$NVIM_VERSION/nvim-linux-x86_64.appimage"
-  chmod +x "$bin/nvim.appimage"
-  ln -sf nvim.appimage "$bin/nvim"
+  chmod +x "$LOCAL_BIN/nvim.appimage"
+  ln -sf nvim.appimage "$LOCAL_BIN/nvim"
 }
 
-install_nvim
-
+# 把設定檔 symlink 到定位；若目標是既有的真實檔案，先搬進 repo 再建 symlink
 link() {
   local src="$1" dst="$2"
   mkdir -p "$(dirname "$dst")"
@@ -74,18 +76,31 @@ link() {
   ln -sf "$src" "$dst"
 }
 
-link "$DOTFILES/ghostty/config.ghostty" "$HOME/.config/ghostty/config.ghostty"
-link "$DOTFILES/tmux/tmux.conf" "$HOME/.tmux.conf"
-link "$DOTFILES/nvim/init.lua" "$HOME/.config/nvim/init.lua"
-link "$DOTFILES/nvim/lazy-lock.json" "$HOME/.config/nvim/lazy-lock.json"
+# 把所有設定檔連到定位
+link_configs() {
+  link "$DOTFILES/ghostty/config.ghostty" "$HOME/.config/ghostty/config.ghostty"
+  link "$DOTFILES/tmux/tmux.conf" "$HOME/.tmux.conf"
+  link "$DOTFILES/nvim/init.lua" "$HOME/.config/nvim/init.lua"
+  link "$DOTFILES/nvim/lazy-lock.json" "$HOME/.config/nvim/lazy-lock.json"
 
-grep -qxF "source $DOTFILES/bash/ide.sh" "$HOME/.bashrc" || \
-  echo "source $DOTFILES/bash/ide.sh" >> "$HOME/.bashrc"
+  grep -qxF "source $DOTFILES/bash/ide.sh" "$HOME/.bashrc" || \
+    echo "source $DOTFILES/bash/ide.sh" >> "$HOME/.bashrc"
+}
 
+# 依 lazy-lock.json 鎖定的 commit 還原外掛，確保外掛版本跟這份 dotfiles 一致
+restore_nvim_plugins() {
+  echo "還原 Neovim 外掛版本（lazy-lock.json）..."
+  "$LOCAL_BIN/nvim" --headless -c "lua require('lazy').restore({ wait = true })" -c "qa" 2>&1
+}
+
+# ============================================================
+# 主流程
+# ============================================================
+check_deps
+install_nerd_font
+install_nvim
+link_configs
 bash "$DOTFILES/gnome/keybindings.sh"
-
-# 依 lazy-lock.json 鎖定的版本安裝/還原外掛，確保跟這份 dotfiles 記錄的版本一致
-echo "還原 Neovim 外掛版本（lazy-lock.json）..."
-"$HOME/.local/bin/nvim" --headless -c "lua require('lazy').restore({ wait = true })" -c "qa" 2>&1
+restore_nvim_plugins
 
 echo "install.sh 完成"
