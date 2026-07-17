@@ -42,7 +42,8 @@ require("lazy").setup({
     config = function()
       require("neo-tree").setup({
         close_if_last_window = true,
-        sources = { "filesystem", "git_status", "buffers" },
+        -- buffers source 已由頂端 bufferline 取代，故移除
+        sources = { "filesystem", "git_status" },
         -- 側邊欄頂端的來源切換器（圖示分頁）＝ VSCode activity bar 的角色
         source_selector = {
           winbar = true,
@@ -50,7 +51,6 @@ require("lazy").setup({
           sources = {
             { source = "filesystem", display_name = "󰙅 Files" },
             { source = "git_status", display_name = "󰊢 Git" },
-            { source = "buffers", display_name = "󰈔 Buffers" },
           },
         },
         filesystem = {
@@ -70,7 +70,6 @@ require("lazy").setup({
       vim.keymap.set("n", "<leader>e", "<cmd>Neotree toggle<cr>", { desc = "側邊欄開關", silent = true })
       vim.keymap.set("n", "<leader>1", "<cmd>Neotree filesystem<cr>", { desc = "側邊欄：Files", silent = true })
       vim.keymap.set("n", "<leader>2", "<cmd>Neotree git_status<cr>", { desc = "側邊欄：Git", silent = true })
-      vim.keymap.set("n", "<leader>3", "<cmd>Neotree buffers<cr>", { desc = "側邊欄：Buffers", silent = true })
     end,
   },
   {
@@ -146,14 +145,74 @@ require("lazy").setup({
     config = function()
       local wk = require("which-key")
       wk.setup({})
-      -- 群組標籤：讓 <leader>g 開頭的一批顯示成「Git」
+      -- 群組標籤：讓 <leader>g / <leader>b 開頭的各自歸類
       wk.add({
         { "<leader>g", group = "Git" },
+        { "<leader>b", group = "Buffer" },
         { "<leader>1", desc = "側邊欄：Files" },
         { "<leader>2", desc = "側邊欄：Git" },
-        { "<leader>3", desc = "側邊欄：Buffers" },
         { "<leader>e", desc = "側邊欄開關" },
       })
+    end,
+  },
+  {
+    -- VSCode 式的頂端 buffer 分頁（開啟的檔案排成分頁）
+    "akinsho/bufferline.nvim",
+    dependencies = { "nvim-tree/nvim-web-devicons" },
+    event = "VeryLazy",
+    config = function()
+      require("bufferline").setup({
+        options = {
+          diagnostics = false,
+          always_show_bufferline = true,
+          show_buffer_close_icons = true,
+          show_close_icon = false,
+          -- 幫 neo-tree 側邊欄留位，分頁不會蓋到側邊欄
+          offsets = {
+            {
+              filetype = "neo-tree",
+              text = "檔案總管",
+              text_align = "center",
+              separator = true,
+            },
+          },
+        },
+        -- 未指定 highlights，bufferline 會沿用當前 colorscheme（Catppuccin）的配色
+      })
+
+      -- 關閉目前 buffer 但保留視窗：先把視窗切到別的 buffer 再刪，
+      -- 避免刪掉唯一 buffer 後編輯器視窗關閉、觸發 close_if_last_window 使 nvim 退出
+      local function close_current_buffer()
+        local cur = vim.api.nvim_get_current_buf()
+        if not vim.bo[cur].buflisted then
+          vim.notify("目前不是可關閉的檔案 buffer", vim.log.levels.WARN)
+          return
+        end
+        local alt = vim.fn.bufnr("#")
+        if alt > 0 and alt ~= cur and vim.api.nvim_buf_is_valid(alt) and vim.bo[alt].buflisted then
+          vim.cmd("buffer #")
+        else
+          local other
+          for _, b in ipairs(vim.api.nvim_list_bufs()) do
+            if b ~= cur and vim.bo[b].buflisted and vim.api.nvim_buf_is_valid(b) then
+              other = b
+              break
+            end
+          end
+          if other then
+            vim.cmd("buffer " .. other)
+          else
+            vim.cmd("enew") -- 沒有其他 buffer 就開一個空的，視窗才不會關
+          end
+        end
+        pcall(vim.cmd, "bdelete " .. cur)
+      end
+
+      vim.keymap.set("n", "]b", "<cmd>BufferLineCycleNext<cr>", { desc = "下一個分頁", silent = true })
+      vim.keymap.set("n", "[b", "<cmd>BufferLineCyclePrev<cr>", { desc = "上一個分頁", silent = true })
+      vim.keymap.set("n", "<leader>bp", "<cmd>BufferLinePick<cr>", { desc = "選取分頁（顯示字母跳）", silent = true })
+      vim.keymap.set("n", "<leader>bd", close_current_buffer, { desc = "關閉目前 buffer", silent = true })
+      vim.keymap.set("n", "<leader>bo", "<cmd>BufferLineCloseOthers<cr>", { desc = "關閉其他 buffer", silent = true })
     end,
   },
 })

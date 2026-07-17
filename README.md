@@ -70,8 +70,10 @@ bash ~/code/dotfiles/install.sh
 | 按鍵 | 動作 |
 |---|---|
 | `<leader>e` | 側邊欄開關（leader = 空白鍵） |
-| `<leader>1` / `2` / `3` | 切到 `󰙅 Files` / `󰊢 Git` / `󰈔 Buffers` |
+| `<leader>1` / `2` | 切到 `󰙅 Files` / `󰊢 Git` |
 | `<` / `>` | 在側邊欄內循環上一個/下一個 source |
+
+（開啟的檔案改由頂端 bufferline 呈現，故側邊欄不再有 Buffers source。）
 
 側邊欄內常用：`Enter`/`o` 開檔、`a`/`d`/`r` 新增/刪除/改名、`H` 顯示隱藏檔、`R` 重新整理、`?` 完整按鍵說明。
 Git 分頁（`<leader>2`）專屬：`ga` 暫存、`gu` 取消暫存、`gc` commit、`gp` push、`gg` commit+push。
@@ -95,21 +97,33 @@ Git 分頁（`<leader>2`）專屬：`ga` 暫存、`gu` 取消暫存、`gc` commi
 
 **退出**：diffview 在畫面內按 `q`（或 `:DiffviewClose`）；gitgraph 按 `q`（或 `:q`）。
 
+### 頂端 buffer 分頁（bufferline）
+
+開啟的檔案會排成頂端分頁（像 VSCode 的編輯器分頁），會自動幫 neo-tree 側邊欄留位不重疊：
+
+| 按鍵 | 動作 |
+|---|---|
+| `]b` / `[b` | 下一個 / 上一個分頁 |
+| `<leader>bp` | 選取分頁（每個分頁顯示字母，按字母跳） |
+| `<leader>bd` | 關閉目前 buffer |
+| `<leader>bo` | 關閉其他 buffer |
+
 ### 指令提示（which-key）
 
-不用背快捷鍵——按下前綴鍵（例如 `<leader>` 空白鍵、或 `g`）稍等一下，畫面**最下面**會跳出目前情境可用的指令清單（依你所在的功能顯示，`<leader>g` 開頭的會歸類在「Git」群組下）。
+不用背快捷鍵——按下前綴鍵（例如 `<leader>` 空白鍵、或 `g`）稍等一下，畫面**最下面**會跳出目前情境可用的指令清單（依你所在的功能顯示，`<leader>g` 開頭的歸「Git」群組、`<leader>b` 歸「Buffer」群組）。
 
 ## Neovim 版本與外掛
 
 - **Neovim 用官方 AppImage 裝在 `~/.local/bin/nvim`**（版本鎖定於 `install.sh` 的 `NVIM_VERSION`）。apt 的 0.9.5 太舊、新外掛常要求 0.10+，故不走 apt。要還原成 apt 版，刪掉 `~/.local/bin/nvim` 與 `nvim.appimage` 即可。
 - 外掛用 [lazy.nvim](https://github.com/folke/lazy.nvim) 管理，設定在 `nvim/init.lua`：
   - `catppuccin/nvim`（mocha，跟 Ghostty 主題一致）
-  - `neo-tree.nvim`（檔案樹 + git_status + buffers 三個可切換 source）＋依賴 `plenary.nvim`、`nui.nvim`
+  - `neo-tree.nvim`（檔案樹 + git_status 兩個可切換 source）＋依賴 `plenary.nvim`、`nui.nvim`
   - `vim-tmux-navigator`（統一 Ctrl+hjkl 導航）
   - `gitsigns.nvim`（gutter 標記、hunk 暫存、行內 blame）
   - `diffview.nvim`（diff / 檔案歷史 / 衝突解決）
   - `gitgraph.nvim`（提交樹狀圖）
   - `which-key.nvim`（按前綴鍵時在畫面最下面提示可用指令）
+  - `bufferline.nvim`（頂端 VSCode 式的 buffer 分頁）
   - `nvim-web-devicons`（圖示）
 
 **`nvim/lazy-lock.json`** 記錄每個外掛鎖定的確切 commit，納入版本控制以確保各機器外掛版本一致。
