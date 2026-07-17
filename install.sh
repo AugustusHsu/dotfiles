@@ -3,18 +3,20 @@ set -e
 
 DOTFILES="$HOME/code/dotfiles"
 
+# nvim 不走 apt（apt 只有 0.9.5，太舊）；改用 AppImage 裝到 ~/.local/bin，見 install_nvim
+NVIM_VERSION="v0.12.4"
+
 declare -A APT_PACKAGE=(
   [ghostty]=ghostty
   [tmux]=tmux
   [tree]=tree
   [git]=git
-  [nvim]=neovim
   [curl]=curl
 )
 
 check_deps() {
   local missing=()
-  for cmd in ghostty tmux tree git nvim curl; do
+  for cmd in ghostty tmux tree git curl; do
     command -v "$cmd" >/dev/null 2>&1 || missing+=("$cmd")
   done
   if [ ${#missing[@]} -gt 0 ]; then
@@ -47,6 +49,22 @@ install_nerd_font() {
 
 install_nerd_font
 
+install_nvim() {
+  # 用官方 AppImage 裝指定版本的 nvim 到 ~/.local/bin（不需 sudo，蓋過 apt 的舊版）
+  local bin="$HOME/.local/bin"
+  if [ -x "$bin/nvim" ] && "$bin/nvim" --version 2>/dev/null | grep -q "$NVIM_VERSION"; then
+    return
+  fi
+  echo "安裝 Neovim $NVIM_VERSION AppImage..."
+  mkdir -p "$bin"
+  curl -sL -o "$bin/nvim.appimage" \
+    "https://github.com/neovim/neovim/releases/download/$NVIM_VERSION/nvim-linux-x86_64.appimage"
+  chmod +x "$bin/nvim.appimage"
+  ln -sf nvim.appimage "$bin/nvim"
+}
+
+install_nvim
+
 link() {
   local src="$1" dst="$2"
   mkdir -p "$(dirname "$dst")"
@@ -68,6 +86,6 @@ bash "$DOTFILES/gnome/keybindings.sh"
 
 # 依 lazy-lock.json 鎖定的版本安裝/還原外掛，確保跟這份 dotfiles 記錄的版本一致
 echo "還原 Neovim 外掛版本（lazy-lock.json）..."
-nvim --headless -c "lua require('lazy').restore({ wait = true })" -c "qa" 2>&1
+"$HOME/.local/bin/nvim" --headless -c "lua require('lazy').restore({ wait = true })" -c "qa" 2>&1
 
 echo "install.sh 完成"

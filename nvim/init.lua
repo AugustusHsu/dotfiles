@@ -27,67 +27,63 @@ require("lazy").setup({
     opts = {},
   },
   {
-    "nvim-tree/nvim-tree.lua",
-    tag = "compat-nvim-0.9",
-    dependencies = { "nvim-tree/nvim-web-devicons" },
+    -- 統一 Ctrl+hjkl 導航：跨 nvim 視窗與 tmux pane（純 vimscript，相容 nvim 0.9）
+    "christoomey/vim-tmux-navigator",
+    lazy = false,
+  },
+  {
+    "nvim-neo-tree/neo-tree.nvim",
+    branch = "v3.x",
+    dependencies = {
+      "nvim-lua/plenary.nvim",
+      "nvim-tree/nvim-web-devicons",
+      "MunifTanjim/nui.nvim",
+    },
     config = function()
-      local function on_attach(bufnr)
-        local api = require("nvim-tree.api")
-        local function opts(desc)
-          return { desc = "nvim-tree: " .. desc, buffer = bufnr, noremap = true, silent = true, nowait = true }
-        end
-
-        api.config.mappings.default_on_attach(bufnr)
-
-        -- 停用改變樹狀圖根目錄的按鍵，避免不小心跳到上一層/其他資料夾把版面弄亂
-        pcall(vim.keymap.del, "n", "-", { buffer = bufnr })
-        pcall(vim.keymap.del, "n", "<C-]>", { buffer = bufnr })
-
-        -- 根目錄標籤那一行（游標在第 1 行）在 nvim-tree 內部會被當成
-        -- 根節點自己，按 Enter/o 開啟等同於跳到上一層；這裡包一層判斷
-        -- 擋掉，同時保留標籤顯示（root_folder_label 維持預設樣式）
-        local function guard_root(fn)
-          return function()
-            local node = api.tree.get_node_under_cursor()
-            if node and not node.parent then
-              return
-            end
-            fn()
-          end
-        end
-        vim.keymap.set("n", "<CR>", guard_root(api.node.open.edit), opts("Open"))
-        vim.keymap.set("n", "o", guard_root(api.node.open.edit), opts("Open"))
-        vim.keymap.set("n", "<2-LeftMouse>", guard_root(api.node.open.edit), opts("Open"))
-      end
-
-      require("nvim-tree").setup({
-        on_attach = on_attach,
-        renderer = {
-          highlight_opened_files = "name",
-          highlight_modified = "name",
-          indent_markers = { enable = true },
-          icons = {
-            show = {
-              file = true,
-              folder = true,
-              folder_arrow = true,
-              git = true,
-              modified = true,
-            },
+      require("neo-tree").setup({
+        close_if_last_window = true,
+        sources = { "filesystem", "git_status", "buffers" },
+        -- 側邊欄頂端的來源切換器（圖示分頁）＝ VSCode activity bar 的角色
+        source_selector = {
+          winbar = true,
+          content_layout = "center",
+          sources = {
+            { source = "filesystem", display_name = "󰙅 Files" },
+            { source = "git_status", display_name = "󰊢 Git" },
+            { source = "buffers", display_name = "󰈔 Buffers" },
           },
         },
-        git = { enable = true },
-        actions = {
-          open_file = { quit_on_open = false },
+        filesystem = {
+          follow_current_file = { enabled = true },
+          use_libuv_file_watcher = true,
+          -- 用 `nvim .` 開資料夾時直接接管成 neo-tree
+          hijack_netrw_behavior = "open_current",
+        },
+        window = {
+          width = 32,
         },
       })
 
-      -- 用 `nvim .` 開啟資料夾時自動打開側邊欄
+      -- 切換器快捷鍵（直接跳到某來源，像 VSCode Ctrl+Shift+E / G）
+      vim.keymap.set("n", "<leader>e", "<cmd>Neotree toggle<cr>", { desc = "側邊欄開關", silent = true })
+      vim.keymap.set("n", "<leader>1", "<cmd>Neotree filesystem<cr>", { desc = "側邊欄：Files", silent = true })
+      vim.keymap.set("n", "<leader>2", "<cmd>Neotree git_status<cr>", { desc = "側邊欄：Git", silent = true })
+      vim.keymap.set("n", "<leader>3", "<cmd>Neotree buffers<cr>", { desc = "側邊欄：Buffers", silent = true })
+
+      -- 用 `nvim .` 開資料夾（或無參數）時自動開啟側邊欄
       vim.api.nvim_create_autocmd("VimEnter", {
-        callback = function(data)
-          local stat = vim.loop.fs_stat(data.file)
-          if data.file == "" or (stat and stat.type == "directory") then
-            require("nvim-tree.api").tree.open()
+        callback = function()
+          local should = vim.fn.argc() == 0
+          for i = 2, #vim.v.argv do
+            local a = vim.v.argv[i]
+            if a == "." or vim.fn.isdirectory(a) == 1 then
+              should = true
+            end
+          end
+          if should then
+            vim.schedule(function()
+              vim.cmd("Neotree show")
+            end)
           end
         end,
       })
