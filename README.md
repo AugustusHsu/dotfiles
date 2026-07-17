@@ -91,11 +91,21 @@ Git 分頁（`<leader>2`）專屬：`ga` 暫存、`gu` 取消暫存、`gc` commi
 | `<leader>gb` | 切換行內 blame | gitsigns |
 | `<leader>gd` | 開 Diffview 看目前所有變更 | diffview |
 | `<leader>gh` | 目前檔案的 commit 歷史 | diffview |
-| `<leader>gg` | 提交樹狀圖；在圖上對 commit 按 `Enter` 開該筆 diff | gitgraph |
+| `<leader>gg` | 開提交樹狀圖（gitgraph） | gitgraph |
 
 編輯器左側 gutter 會即時顯示哪幾行新增/修改/刪除（gitsigns，自動開啟）。
 
-**退出**：diffview 在畫面內按 `q`（或 `:DiffviewClose`）；gitgraph 按 `q`（或 `:q`）。
+**gitgraph 圖內按鍵**（buffer-local，只在圖裡有效）：
+
+| 按鍵 | 動作 |
+|---|---|
+| `Enter` | 看游標所在 commit 的 diff（開 diffview） |
+| `<leader>gm` | 顯示該 commit 的完整 message（浮窗，`q`/`Esc` 關） |
+| `<leader>co` | checkout 該 commit（detached HEAD，先確認） |
+| `<leader>cb` | checkout 該 commit 的分支 |
+| `q` | 返回編輯器 |
+
+**退出**：diffview 在畫面內按 `q`（或 `:DiffviewClose`）；gitgraph 按 `q` 返回編輯器。
 
 ### 頂端 buffer 分頁（bufferline）
 
