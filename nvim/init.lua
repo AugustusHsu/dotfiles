@@ -163,18 +163,141 @@ vim.opt.termguicolors = true
 -- 永遠保留 git 標記欄，避免有/無 git 標記時行號欄寬度跳動
 vim.opt.signcolumn = "yes"
 
--- gitgraph 畫面按 q：切回原本的 buffer（編輯器），不關視窗——
--- 直接關視窗會讓 neo-tree 變成最後一個視窗、觸發 close_if_last_window 使 nvim 退出
+-- 取得 gitgraph 圖上游標所在的 commit（用 gitgraph 的公開 API）
+local function gg_commit_under_cursor()
+  local ok_draw, draw = pcall(require, "gitgraph.draw")
+  local ok_utils, utils = pcall(require, "gitgraph.utils")
+  if not (ok_draw and ok_utils) or not draw.graph then
+    return nil
+  end
+  local row = vim.api.nvim_win_get_cursor(0)[1]
+  return utils.get_commit_from_row(draw.graph, row)
+end
+
+-- checkout 後刷新 gitgraph 圖與 gitsigns 的 git 狀態
+local function gg_refresh()
+  pcall(function()
+    require("gitgraph").draw({}, { all = true, max_count = 5000 })
+  end)
+  pcall(function()
+    require("gitsigns").refresh()
+  end)
+end
+
+-- checkout 游標所在的 commit（detached HEAD，先確認）
+local function gg_checkout_commit()
+  local c = gg_commit_under_cursor()
+  if not c then
+    vim.notify("找不到游標所在的 commit", vim.log.levels.WARN)
+    return
+  end
+  if vim.fn.confirm("checkout commit " .. c.hash .. "？（會進入 detached HEAD）", "&Yes\n&No", 2) ~= 1 then
+    return
+  end
+  local out = vim.fn.system({ "git", "checkout", c.hash })
+  if vim.v.shell_error ~= 0 then
+    vim.notify("checkout 失敗：\n" .. out, vim.log.levels.ERROR)
+    return
+  end
+  vim.notify("已 checkout " .. c.hash .. "（detached HEAD）")
+  gg_refresh()
+end
+
+-- checkout 游標所在 commit 的分支（多個時用選單）
+local function gg_checkout_branch()
+  local c = gg_commit_under_cursor()
+  if not c then
+    vim.notify("找不到游標所在的 commit", vim.log.levels.WARN)
+    return
+  end
+  local branches, seen = {}, {}
+  for _, b in ipairs(c.branch_names or {}) do
+    local name = b:match("->%s*(.+)$") or b
+    name = name:gsub("^%s+", ""):gsub("%s+$", "")
+    if name ~= "" and name ~= "HEAD" and not name:match("^tag:") and not seen[name] then
+      seen[name] = true
+      branches[#branches + 1] = name
+    end
+  end
+  if #branches == 0 then
+    vim.notify("這個 commit 上沒有分支可 checkout", vim.log.levels.WARN)
+    return
+  end
+  local function do_checkout(name)
+    local out = vim.fn.system({ "git", "checkout", name })
+    if vim.v.shell_error ~= 0 then
+      vim.notify("checkout 失敗：\n" .. out, vim.log.levels.ERROR)
+      return
+    end
+    vim.notify("已 checkout 分支 " .. name)
+    gg_refresh()
+  end
+  if #branches == 1 then
+    do_checkout(branches[1])
+  else
+    vim.ui.select(branches, { prompt = "選擇要 checkout 的分支：" }, function(choice)
+      if choice then
+        do_checkout(choice)
+      end
+    end)
+  end
+end
+
+-- 顯示游標所在 commit 的完整 message（浮動視窗）
+local function gg_show_message()
+  local c = gg_commit_under_cursor()
+  if not c then
+    vim.notify("找不到游標所在的 commit", vim.log.levels.WARN)
+    return
+  end
+  local msg = vim.fn.systemlist({ "git", "show", "-s", "--format=%B", c.hash })
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, msg)
+  vim.bo[buf].modifiable = false
+  vim.bo[buf].bufhidden = "wipe"
+  local width = math.min(80, vim.o.columns - 4)
+  local height = math.max(3, math.min(#msg + 1, vim.o.lines - 4))
+  local win = vim.api.nvim_open_win(buf, true, {
+    relative = "editor",
+    width = width,
+    height = height,
+    row = math.floor((vim.o.lines - height) / 2),
+    col = math.floor((vim.o.columns - width) / 2),
+    style = "minimal",
+    border = "rounded",
+    title = " commit " .. c.hash .. " ",
+    title_pos = "center",
+  })
+  -- 把游標移離第一個字（gitmoji），避免 block 方塊游標蓋在 emoji 上看起來像背景框
+  vim.api.nvim_win_call(win, function()
+    vim.cmd("normal! $")
+  end)
+  vim.keymap.set("n", "q", "<cmd>close<cr>", { buffer = buf, silent = true })
+  vim.keymap.set("n", "<Esc>", "<cmd>close<cr>", { buffer = buf, silent = true })
+end
+
+-- gitgraph 畫面的 buffer-local 快捷鍵（which-key 會依 desc 在此 buffer 顯示）
 vim.api.nvim_create_autocmd("FileType", {
   pattern = "gitgraph",
   callback = function(ev)
-    vim.keymap.set("n", "q", function()
+    local function map(lhs, fn, desc)
+      vim.keymap.set("n", lhs, fn, { buffer = ev.buf, silent = true, desc = desc })
+    end
+    -- q：切回原本的 buffer（不關視窗，避免觸發 close_if_last_window 使 nvim 退出）
+    map("q", function()
       local prev = vim.g.gitgraph_prev_buf
       if prev and vim.api.nvim_buf_is_valid(prev) then
         vim.cmd("buffer " .. prev)
       else
-        vim.cmd("enew") -- 沒有記錄到就開一個空的，避免關視窗
+        vim.cmd("enew")
       end
-    end, { buffer = ev.buf, silent = true, desc = "返回編輯器" })
+    end, "返回編輯器")
+    map("<leader>co", gg_checkout_commit, "checkout 此 commit")
+    map("<leader>cb", gg_checkout_branch, "checkout 此分支")
+    map("<leader>gm", gg_show_message, "顯示完整 commit message")
+    -- which-key 群組標籤（buffer-local）
+    pcall(function()
+      require("which-key").add({ { "<leader>c", group = "Checkout", buffer = ev.buf } })
+    end)
   end,
 })
