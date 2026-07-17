@@ -56,10 +56,12 @@ require("lazy").setup({
         filesystem = {
           follow_current_file = { enabled = true },
           use_libuv_file_watcher = true,
-          -- 用 `nvim .` 開資料夾時直接接管成 neo-tree
-          hijack_netrw_behavior = "open_current",
+          -- 用 `nvim .` 開資料夾時直接接管成 neo-tree 左側欄
+          -- （open_default = 開在預設位置＝左側欄；不要用 open_current，那會佔滿整個視窗）
+          hijack_netrw_behavior = "open_default",
         },
         window = {
+          position = "left",
           width = 32,
         },
       })
@@ -69,24 +71,6 @@ require("lazy").setup({
       vim.keymap.set("n", "<leader>1", "<cmd>Neotree filesystem<cr>", { desc = "側邊欄：Files", silent = true })
       vim.keymap.set("n", "<leader>2", "<cmd>Neotree git_status<cr>", { desc = "側邊欄：Git", silent = true })
       vim.keymap.set("n", "<leader>3", "<cmd>Neotree buffers<cr>", { desc = "側邊欄：Buffers", silent = true })
-
-      -- 用 `nvim .` 開資料夾（或無參數）時自動開啟側邊欄
-      vim.api.nvim_create_autocmd("VimEnter", {
-        callback = function()
-          local should = vim.fn.argc() == 0
-          for i = 2, #vim.v.argv do
-            local a = vim.v.argv[i]
-            if a == "." or vim.fn.isdirectory(a) == 1 then
-              should = true
-            end
-          end
-          if should then
-            vim.schedule(function()
-              vim.cmd("Neotree show")
-            end)
-          end
-        end,
-      })
     end,
   },
 })
