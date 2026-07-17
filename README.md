@@ -74,7 +74,30 @@ bash ~/code/dotfiles/install.sh
 | `<` / `>` | 在側邊欄內循環上一個/下一個 source |
 
 側邊欄內常用：`Enter`/`o` 開檔、`a`/`d`/`r` 新增/刪除/改名、`H` 顯示隱藏檔、`R` 重新整理、`?` 完整按鍵說明。
-Git 分頁專屬：`ga` 暫存、`gu` 取消暫存、`gc` commit、`gp` push、`gg` commit+push。
+Git 分頁（`<leader>2`）專屬：`ga` 暫存、`gu` 取消暫存、`gc` commit、`gp` push、`gg` commit+push。
+
+### Git 功能快捷鍵
+
+除了側邊欄的 Git 分頁（變更檔案清單 + 暫存/提交），另有這些 git 工具：
+
+| 按鍵 | 動作 | 來源 |
+|---|---|---|
+| `]c` / `[c` | 跳到下/上一個變更區塊（hunk） | gitsigns |
+| `<leader>gp` | 預覽游標所在 hunk | gitsigns |
+| `<leader>gs` | 暫存游標所在 hunk | gitsigns |
+| `<leader>gr` | 還原游標所在 hunk | gitsigns |
+| `<leader>gb` | 切換行內 blame | gitsigns |
+| `<leader>gd` | 開 Diffview 看目前所有變更 | diffview |
+| `<leader>gh` | 目前檔案的 commit 歷史 | diffview |
+| `<leader>gg` | 提交樹狀圖；在圖上對 commit 按 `Enter` 開該筆 diff | gitgraph |
+
+編輯器左側 gutter 會即時顯示哪幾行新增/修改/刪除（gitsigns，自動開啟）。
+
+**退出**：diffview 在畫面內按 `q`（或 `:DiffviewClose`）；gitgraph 按 `q`（或 `:q`）。
+
+### 指令提示（which-key）
+
+不用背快捷鍵——按下前綴鍵（例如 `<leader>` 空白鍵、或 `g`）稍等一下，畫面**最下面**會跳出目前情境可用的指令清單（依你所在的功能顯示，`<leader>g` 開頭的會歸類在「Git」群組下）。
 
 ## Neovim 版本與外掛
 
@@ -83,6 +106,10 @@ Git 分頁專屬：`ga` 暫存、`gu` 取消暫存、`gc` commit、`gp` push、`
   - `catppuccin/nvim`（mocha，跟 Ghostty 主題一致）
   - `neo-tree.nvim`（檔案樹 + git_status + buffers 三個可切換 source）＋依賴 `plenary.nvim`、`nui.nvim`
   - `vim-tmux-navigator`（統一 Ctrl+hjkl 導航）
+  - `gitsigns.nvim`（gutter 標記、hunk 暫存、行內 blame）
+  - `diffview.nvim`（diff / 檔案歷史 / 衝突解決）
+  - `gitgraph.nvim`（提交樹狀圖）
+  - `which-key.nvim`（按前綴鍵時在畫面最下面提示可用指令）
   - `nvim-web-devicons`（圖示）
 
 **`nvim/lazy-lock.json`** 記錄每個外掛鎖定的確切 commit，納入版本控制以確保各機器外掛版本一致。
