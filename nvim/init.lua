@@ -215,12 +215,137 @@ require("lazy").setup({
       vim.keymap.set("n", "<leader>bo", "<cmd>BufferLineCloseOthers<cr>", { desc = "關閉其他 buffer", silent = true })
     end,
   },
+  {
+    -- 底部終端機面板（VSCode 式）：claude 為預設終端機
+    "akinsho/toggleterm.nvim",
+    event = "VeryLazy",
+    config = function()
+      require("toggleterm").setup({
+        direction = "horizontal",
+        size = 15,
+        start_in_insert = true,
+        terminal_mappings = true,
+      })
+
+      local Terminal = require("toggleterm.terminal").Terminal
+      -- claude 預設終端機（底部水平）
+      -- 不用 cmd 直接跑 claude：先開 shell，等 edgy 把面板定位到正確寬度後才啟動 claude，
+      -- 避免 claude 歡迎橫幅在全寬下印出、之後被縮窄的面板切掉（且開關也修不回來）
+      local claude = Terminal:new({
+        direction = "horizontal",
+        display_name = "claude",
+        count = 1,
+        on_open = function(term)
+          if not term.__claude_started then
+            term.__claude_started = true
+            vim.defer_fn(function()
+              pcall(function()
+                term:send("claude")
+              end)
+            end, 200)
+          end
+        end,
+      })
+
+      -- 終端機管理選單（一鍵涵蓋新增/切換/改名/關閉）
+      local function term_menu()
+        vim.ui.select(
+          { "新增終端機", "切換終端機", "重新命名終端機", "關閉目前終端機" },
+          { prompt = "終端機管理" },
+          function(choice)
+            if choice == "新增終端機" then
+              vim.cmd("TermNew direction=horizontal")
+            elseif choice == "切換終端機" then
+              vim.cmd("TermSelect")
+            elseif choice == "重新命名終端機" then
+              vim.cmd("ToggleTermSetName")
+            elseif choice == "關閉目前終端機" then
+              vim.cmd("bdelete!")
+            end
+          end
+        )
+      end
+
+      -- Ctrl+/ 開關終端機面板（claude）；n + t + i 都能按
+      -- （不用 <C-\>：它在終端機模式跟內建跳出鍵 <C-\><C-n> 衝突。<C-_> 是後備，
+      --   有些終端機把 Ctrl+/ 送成 Ctrl+_）
+      for _, key in ipairs({ "<C-/>", "<C-_>" }) do
+        vim.keymap.set({ "n", "t", "i" }, key, function() claude:toggle() end, { desc = "開關終端機面板（claude）" })
+      end
+      -- Ctrl+t 開管理選單
+      vim.keymap.set({ "n", "t" }, "<C-t>", function() term_menu() end, { desc = "終端機管理選單" })
+      -- 終端機內用 Ctrl+hjkl 跳出終端機模式並移到對應視窗（不用 Esc）
+      vim.keymap.set("t", "<C-h>", [[<C-\><C-n><C-w>h]], { desc = "移到左邊視窗" })
+      vim.keymap.set("t", "<C-j>", [[<C-\><C-n><C-w>j]], { desc = "移到下面視窗" })
+      vim.keymap.set("t", "<C-k>", [[<C-\><C-n><C-w>k]], { desc = "移到上面視窗" })
+      vim.keymap.set("t", "<C-l>", [[<C-\><C-n><C-w>l]], { desc = "移到右邊視窗" })
+
+      -- 終端機底部提示（buffer-local statusline）
+      vim.api.nvim_create_autocmd("TermOpen", {
+        pattern = "term://*",
+        callback = function()
+          vim.opt_local.statusline = "  C-/ 開關  ·  C-hjkl 移動  ·  C-t 管理選單  "
+        end,
+      })
+
+      -- 進入終端機時自動切 insert 模式：edgy 重新排版後可能停在 normal 模式，導致打不進去
+      vim.api.nvim_create_autocmd({ "BufEnter", "WinEnter", "TermOpen" }, {
+        pattern = "term://*",
+        callback = function()
+          vim.cmd("startinsert")
+        end,
+      })
+
+      -- 啟動於資料夾（ide 情境）時，自動開 claude 為預設底部終端機
+      local function launched_on_dir()
+        for i = 2, #vim.v.argv do
+          local a = vim.v.argv[i]
+          if a == "." or vim.fn.isdirectory(a) == 1 then
+            return true
+          end
+        end
+        return false
+      end
+      if launched_on_dir() then
+        vim.schedule(function()
+          claude:open()
+          -- 開完 claude 後把焦點移回編輯器（不要一啟動就卡在終端機）
+          vim.schedule(function()
+            vim.cmd("wincmd k")
+          end)
+        end)
+      end
+    end,
+  },
+  {
+    -- 版面管理：neo-tree 釘左邊（全高）、toggleterm 釘底部（只在編輯器下方，不佔 neo-tree）
+    "folke/edgy.nvim",
+    event = "VeryLazy",
+    opts = {
+      animate = { enabled = false },
+      left = {
+        { ft = "neo-tree", size = { width = 32 } },
+      },
+      bottom = {
+        {
+          ft = "toggleterm",
+          size = { height = 15 },
+          -- 只管非浮動的終端機（避免 edgy 誤管浮動視窗）
+          filter = function(_buf, win)
+            return vim.api.nvim_win_get_config(win).relative == ""
+          end,
+        },
+      },
+    },
+  },
 })
 
 vim.opt.number = true
 vim.opt.termguicolors = true
 -- 永遠保留 git 標記欄，避免有/無 git 標記時行號欄寬度跳動
 vim.opt.signcolumn = "yes"
+-- edgy 建議：split 時保持畫面穩定
+vim.opt.splitkeep = "screen"
 
 -- 取得 gitgraph 圖上游標所在的 commit（用 gitgraph 的公開 API）
 local function gg_commit_under_cursor()
