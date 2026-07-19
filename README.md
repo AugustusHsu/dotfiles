@@ -37,22 +37,22 @@ bash ~/code/dotfiles/install.sh
 
 ## `ide` 指令
 
-在任一專案目錄下執行 `ide`，會建立（或接回）一個以目錄名稱命名的 tmux session：
+在任一專案目錄下執行 `ide`，會建立（或接回）一個以目錄名稱命名的 tmux session，裡面單一 `nvim .` 全螢幕——IDE 的所有面板（檔案樹、編輯器、git、底部終端機）都在 nvim 內部：
 
 ```
-┌─────────────────────────────────┐
-│  nvim .（約 70% 高）             │
-│  neo-tree 側邊欄 + 編輯區        │
-├─────────────────────────────────┤
-│  claude（約 30% 高）             │
-└─────────────────────────────────┘
+┌──────────┬─────────────────────────────┐
+│ neo-tree │  bufferline 頂端分頁         │
+│ 側邊欄   │  編輯器                      │
+│ (左,全高)├─────────────────────────────┤
+│          │  toggleterm 底部終端機（claude）│
+└──────────┴─────────────────────────────┘
 ```
 
 同一目錄重複執行會接回既有 session（Claude 對話與編輯狀態都會保留）。
 
 ### 導航快捷鍵（跨 nvim 視窗與 tmux pane）
 
-`vim-tmux-navigator` 把 nvim 視窗與 tmux pane 縫成同一套，用一組 `Ctrl+hjkl` 即可在側邊欄、編輯器、claude pane 之間移動：
+`vim-tmux-navigator` 把 nvim 視窗與 tmux pane 縫成同一套，用一組 `Ctrl+hjkl` 即可在側邊欄、編輯器、底部終端機（claude）之間移動：
 
 | 按鍵 | 動作 |
 |---|---|
@@ -62,6 +62,8 @@ bash ~/code/dotfiles/install.sh
 | `C-b d` | Detach（session 留在背景） |
 
 > 副作用：`Ctrl+l` 在 claude/shell pane 會變成「往右切」而非「清畫面」（統一導航攔了全域 Ctrl+l）。
+
+在底部終端機（見下方）裡，`Ctrl+hjkl` 會先跳出終端機的 insert 模式、再移到對應視窗，不用先按 `Esc`。
 
 ### neo-tree 側邊欄
 
@@ -118,6 +120,30 @@ Git 分頁（`<leader>2`）專屬：`ga` 暫存、`gu` 取消暫存、`gc` commi
 | `<leader>bd` | 關閉目前 buffer |
 | `<leader>bo` | 關閉其他 buffer |
 
+### 底部終端機面板（toggleterm）
+
+編輯器下方有一個底部終端機面板（由 edgy 釘住），預設終端機是 **claude**：
+
+| 按鍵 | 動作 |
+|---|---|
+| `Ctrl+/` 或 `Ctrl+_` | 開關終端機面板（n / t / i 模式都能按） |
+
+終端機內按 `Ctrl+hjkl` 會跳出終端機模式並移到對應視窗（見上方導航章節）。終端機底部有一行 statusline 提示常用快捷鍵。
+
+### 終端機清單面板（Ctrl+t，toggleterm-manager）
+
+`Ctrl+t` 開啟一個 telescope 面板，列出所有已開的終端機（右側有預覽），可以新增、切換、改名、刪除：
+
+| 按鍵 | 動作 |
+|---|---|
+| `Ctrl+j` / `Ctrl+k` | 上下移動選取 |
+| `Enter` | 切換到選中的終端機（隱藏其他已開的，聚焦並進 insert） |
+| `Ctrl+i` | 新增終端機 |
+| `Ctrl+r` | 重新命名選中的終端機 |
+| `Ctrl+d` | 刪除選中的終端機 |
+
+清單狀態欄：`a` = 顯示中、`h` = 已隱藏，前綴 `%` = 目前所在的 buffer。快捷鍵說明也直接印在面板標題上。
+
 ### 指令提示（which-key）
 
 不用背快捷鍵——按下前綴鍵（例如 `<leader>` 空白鍵、或 `g`）稍等一下，畫面**最下面**會跳出目前情境可用的指令清單（依你所在的功能顯示，`<leader>g` 開頭的歸「Git」群組、`<leader>b` 歸「Buffer」群組）。
@@ -134,6 +160,10 @@ Git 分頁（`<leader>2`）專屬：`ga` 暫存、`gu` 取消暫存、`gc` commi
   - `gitgraph.nvim`（提交樹狀圖）
   - `which-key.nvim`（按前綴鍵時在畫面最下面提示可用指令）
   - `bufferline.nvim`（頂端 VSCode 式的 buffer 分頁）
+  - `toggleterm.nvim`（底部終端機面板，預設起 claude）
+  - `edgy.nvim`（版面管理：neo-tree 釘左、toggleterm 釘底）
+  - `telescope.nvim`（模糊搜尋框架，供終端機清單面板使用）＋依賴 `plenary.nvim`
+  - `toggleterm-manager.nvim`（`Ctrl+t` 終端機清單面板：切換/新增/改名/刪除）
   - `nvim-web-devicons`（圖示）
 
 **`nvim/lazy-lock.json`** 記錄每個外掛鎖定的確切 commit，納入版本控制以確保各機器外掛版本一致。
