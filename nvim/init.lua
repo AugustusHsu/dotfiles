@@ -53,6 +53,234 @@ end
 -- 永遠強制跳回 claude。等 toggleterm 的 config 跑過才會被賦值成 claude。
 local last_terminal = nil
 
+-- gitgraph 圖裡顯示「尚未 commit 的變更」跟「全部 stash」用的臨時 ref 命名空間。
+-- 放在 refs/heads、refs/tags 之外的自訂命名空間，git branch/git tag 都看不到，
+-- 但 git log --all 還是抓得到（--all 涵蓋 refs/ 底下所有 ref，不限 heads/tags）。
+local GG_PREVIEW_REF_PREFIX = "refs/gitgraph-preview/"
+
+-- gitgraph 原本用 all = true（等於 git log --all）畫圖，但 --all 涵蓋
+-- refs/ 底下「所有」ref，包含 refs/stash 本身——這樣真正的 stash 跟它的
+-- index commit 還是會被畫出來，跟我們自己建立的乾淨版本重複顯示。改成明確
+-- 列出 --branches --tags --remotes（--all 原本涵蓋的主要範圍）加上我們自己
+-- 的臨時 ref 命名空間，藉此排除 refs/stash。
+local GG_REVISION_RANGE = "--branches --tags --remotes --glob='" .. GG_PREVIEW_REF_PREFIX .. "*'"
+
+-- 這次同步產生的臨時 commit 短 hash（對齊 gitgraph 用 %h 顯示的格式）→ 種類
+-- （"uncommitted" 或 "stash"），畫完圖後用來把這些「虛擬」節點跟真正的
+-- commit 視覺上區分開來，兩種還各自用不同符號
+local gg_preview_kind_by_hash = {}
+
+-- 清掉所有我們自己建立的臨時 ref
+local function gg_cleanup_preview_refs()
+  local refs = vim.fn.systemlist({ "git", "for-each-ref", "--format=%(refname)", GG_PREVIEW_REF_PREFIX })
+  for _, ref in ipairs(refs) do
+    if ref ~= "" then
+      vim.fn.system({ "git", "update-ref", "-d", ref })
+    end
+  end
+end
+
+-- 字數超過上限就砍斷、補上「...」。用 strchars/strcharpart（照「字元」數，
+-- 不是 byte 數）避免把中文字元從中間切斷。
+local GG_MSG_MAX_CHARS = 24
+local function gg_truncate(s, max_chars)
+  if vim.fn.strchars(s) <= max_chars then
+    return s
+  end
+  return vim.fn.strcharpart(s, 0, max_chars) .. "..."
+end
+
+-- 把一個 tree + parent + 自訂訊息包成一個**單一 parent**的乾淨 commit。
+-- 不管是「未提交的變更」還是 stash，都用這個共用函式：git stash 格式
+-- 本身一定會帶一個「index on ...」的額外 commit（用來還原 staged/unstaged
+-- 的區別），這裡只是要「看」，不需要能還原，直接複用來源的 tree 內容，
+-- 包成單一 parent、訊息完全自訂的乾淨版本，畫在圖上就只會佔一個節點。
+--
+-- date（可省略，ISO 格式）：git commit-tree 預設用「現在」當這個 commit 的
+-- 時間，如果不明確指定，stash 每次重畫都會被蓋成「現在」，跟真正未提交的
+-- 變更幾乎同時間，gitgraph 的 --date-order 排序、左右分支的位置就會沒有
+-- 固定規則。stash 一定要傳回它原本真正建立的時間，才會穩定排在「未提交的
+-- 變更」（真正的現在）下面、退到右邊的分支。
+local function gg_commit_tree_from(tree, parent, message, date)
+  local old_author, old_committer = vim.env.GIT_AUTHOR_DATE, vim.env.GIT_COMMITTER_DATE
+  if date then
+    vim.env.GIT_AUTHOR_DATE = date
+    vim.env.GIT_COMMITTER_DATE = date
+  end
+  local commit = vim.fn.system({ "git", "commit-tree", tree, "-p", parent, "-m", message }):gsub("%s+$", "")
+  vim.env.GIT_AUTHOR_DATE = old_author
+  vim.env.GIT_COMMITTER_DATE = old_committer
+  if vim.v.shell_error ~= 0 or commit == "" then
+    return nil
+  end
+  return commit
+end
+
+-- 「尚未 commit 的變更」快照：借一個暫時的 index 檔案（GIT_INDEX_FILE，
+-- 不會動到真正的 git 狀態/工作區，用完就丟）把目前 staged+unstaged+
+-- untracked 的變更寫成一個 tree，訊息裡帶上變更的檔案數量。
+-- 沒有任何變更時回傳 nil（tree 會跟 HEAD 一樣，判斷到就跳過）。
+local function gg_snapshot_uncommitted()
+  local old_index = vim.env.GIT_INDEX_FILE
+  local tmp_index = vim.fn.tempname()
+  vim.env.GIT_INDEX_FILE = tmp_index
+  vim.fn.system({ "git", "read-tree", "HEAD" })
+  vim.fn.system({ "git", "add", "-A" })
+  local tree = vim.fn.system({ "git", "write-tree" }):gsub("%s+$", "")
+  vim.env.GIT_INDEX_FILE = old_index
+  pcall(os.remove, tmp_index)
+  if vim.v.shell_error ~= 0 or tree == "" then
+    return nil
+  end
+
+  local head = vim.fn.system({ "git", "rev-parse", "HEAD" }):gsub("%s+$", "")
+  local head_tree = vim.fn.system({ "git", "rev-parse", "HEAD^{tree}" }):gsub("%s+$", "")
+  if tree == head_tree then
+    return nil -- 沒有任何變更
+  end
+
+  local files = vim.fn.systemlist({ "git", "diff", "--name-only", head, tree })
+  local msg = ("未提交的變更 (%d)"):format(#files)
+  return gg_commit_tree_from(tree, head, msg)
+end
+
+-- 把一筆 stash 轉成乾淨的單一 parent commit：stash 這個 commit 物件自己的
+-- tree 就已經是完整的變更內容了（不用另外組），直接複用它 + 它原本的第一個
+-- parent，訊息改成自訂格式「stash: WIP on <branch>: <訊息> <短 hash> <時間>」。
+local function gg_snapshot_stash(stash_ref)
+  local tree = vim.fn.system({ "git", "rev-parse", stash_ref .. "^{tree}" }):gsub("%s+$", "")
+  local parent = vim.fn.system({ "git", "rev-parse", stash_ref .. "^1" }):gsub("%s+$", "")
+  if vim.v.shell_error ~= 0 or tree == "" or parent == "" then
+    return nil
+  end
+
+  local orig_msg = vim.fn.system({ "git", "log", "-1", "--format=%s", stash_ref }):gsub("%s+$", "")
+  -- git 自動組的訊息有兩種格式：沒給 -m 是「WIP on <branch>: <hash> <subject>」，
+  -- 有給 -m 是「On <branch>: <message>」，兩種都要處理。冒號後面那段（不管
+  -- 是使用者自己給的 -m 訊息，還是沒給時 git 自動帶的 hash+subject）當作
+  -- 「訊息」塞進我們自己的格式裡，太長就截斷。
+  local branch, tail = orig_msg:match("^%a+ on ([^:]+):%s*(.*)$")
+  if not branch then
+    branch, tail = orig_msg:match("^On ([^:]+):%s*(.*)$")
+  end
+  branch = branch or "?"
+  local stash_msg = gg_truncate(tail or "", GG_MSG_MAX_CHARS)
+  local short = vim.fn.system({ "git", "rev-parse", "--short", stash_ref }):gsub("%s+$", "")
+  local display_date = vim.fn
+    .system({ "git", "log", "-1", "--format=%ad", "--date=format:%Y-%m-%d %H:%M", stash_ref })
+    :gsub("%s+$", "")
+  -- 傳給 commit-tree 用的日期要跟 stash 原本真正的時間一致（見
+  -- gg_commit_tree_from 的說明），跟訊息裡顯示用的日期分開拿一次、格式不同
+  local commit_date = vim.fn.system({ "git", "log", "-1", "--format=%aI", stash_ref }):gsub("%s+$", "")
+  local msg = ("stash: WIP on %s: %s %s %s"):format(branch, stash_msg, short, display_date)
+  return gg_commit_tree_from(tree, parent, msg, commit_date)
+end
+
+-- 建立/更新臨時 ref，讓 gitgraph 的 git log --all 天生就能把這些畫進圖裡，
+-- 掛在正確的 commit 上，不用改 gitgraph.nvim 半行程式碼：
+--
+-- 1. 「尚未 commit 的變更」：見 gg_snapshot_uncommitted()。
+-- 2. 「全部 stash」：refs/stash 只會指到最新一筆（stash@{0}），更舊的
+--    只存在 reflog，--all 抓不到，所以逐一列出 git stash list 幫每一筆
+--    自己補一個臨時 ref（都先轉成 gg_snapshot_stash() 的乾淨版本）。
+local function gg_sync_preview_refs()
+  gg_cleanup_preview_refs()
+  gg_preview_kind_by_hash = {}
+
+  local function remember_short_hash(full_hash, kind)
+    local short = vim.fn.system({ "git", "rev-parse", "--short", full_hash }):gsub("%s+$", "")
+    if short ~= "" then
+      gg_preview_kind_by_hash[short] = kind
+    end
+  end
+
+  local uncommitted = gg_snapshot_uncommitted()
+  if uncommitted then
+    vim.fn.system({ "git", "update-ref", GG_PREVIEW_REF_PREFIX .. "uncommitted", uncommitted })
+    remember_short_hash(uncommitted, "uncommitted")
+  end
+
+  local stash_refs = vim.fn.systemlist({ "git", "stash", "list", "--format=%H" })
+  for i, stash_hash in ipairs(stash_refs) do
+    if stash_hash ~= "" then
+      local clean = gg_snapshot_stash(stash_hash)
+      if clean then
+        vim.fn.system({ "git", "update-ref", GG_PREVIEW_REF_PREFIX .. "stash-" .. (i - 1), clean })
+        remember_short_hash(clean, "stash")
+      end
+    end
+  end
+end
+
+-- 「未提交的變更」/「stash」節點跟真正的 commit 長得太像，容易搞混。
+-- 畫完圖之後幫這些節點：
+-- 1. 打上顏色，跟真正的 commit 明顯不同——未提交的變更用黃色、stash 用
+--    紫色，兩種虛擬節點彼此也分得出來
+-- 2. 把 hash/日期/作者那行從「hash 開始」的部分截掉，只留左邊的分支符號
+--    ——gitgraph 的欄位順序、要不要顯示 hash/日期是全域設定（format.fields），
+--    沒辦法只針對這幾個節點單獨關掉，只能用「截字」的方式讓它視覺上只剩一行
+--    有內容，游標對應 commit 的邏輯不受影響（改的是畫面文字，不是 graph 資料）
+-- 3. 把節點符號本身也換掉（未提交的變更用 ●、stash 用 ◆），不只是變色，
+--    連符號都跟真正的 commit（*）不一樣。symbols 設定（config.symbols）
+--    是全域的，沒辦法只對這幾個節點單獨換符號，所以一樣用改畫面文字的方式
+local GG_HL_PLUMBING = "GitGraphPlumbingNode"
+local GG_HL_NS = vim.api.nvim_create_namespace("gitgraph_preview")
+local GG_PREVIEW_ICON = { uncommitted = "●", stash = "◆" }
+local GG_PREVIEW_HL = { uncommitted = "GitGraphUncommittedNode", stash = "GitGraphStashNode" }
+vim.api.nvim_set_hl(0, GG_PREVIEW_HL.uncommitted, { fg = "#f9e2af", bold = true, default = true }) -- 黃
+vim.api.nvim_set_hl(0, GG_PREVIEW_HL.stash, { fg = "#cba6f7", bold = true, default = true }) -- 紫
+vim.api.nvim_set_hl(0, GG_HL_PLUMBING, { fg = "#6c7086", italic = true, default = true })
+
+local function gg_style_preview_nodes()
+  local ok, draw = pcall(require, "gitgraph.draw")
+  if not ok or not draw.graph then
+    return
+  end
+  local buf = vim.api.nvim_get_current_buf()
+  vim.api.nvim_buf_clear_namespace(buf, GG_HL_NS, 0, -1)
+
+  local was_modifiable = vim.bo[buf].modifiable
+  vim.bo[buf].modifiable = true
+
+  for i, row in ipairs(draw.graph) do
+    local commit = row.commit
+    if commit then
+      local hl
+      local kind = gg_preview_kind_by_hash[commit.hash]
+      if kind then
+        hl = GG_PREVIEW_HL[kind]
+        local line = vim.api.nvim_buf_get_lines(buf, i - 1, i, false)[1] or ""
+        local star_col = line:find("*", 1, true)
+        if star_col then
+          vim.api.nvim_buf_set_text(buf, i - 1, star_col - 1, i - 1, star_col, { GG_PREVIEW_ICON[kind] or "●" })
+        end
+        line = vim.api.nvim_buf_get_lines(buf, i - 1, i, false)[1] or ""
+        local col = line:find(commit.hash, 1, true)
+        if col then
+          vim.api.nvim_buf_set_text(buf, i - 1, col - 1, i - 1, #line, {})
+        end
+      elseif commit.msg and commit.msg:match("^index on ") then
+        hl = GG_HL_PLUMBING
+      end
+      if hl then
+        -- 每個 commit 佔兩行（hash/日期/作者那行 + 訊息那行），兩行都要上色
+        for _, line_idx in ipairs({ i, i + 1 }) do
+          if draw.graph[line_idx] then
+            vim.api.nvim_buf_set_extmark(buf, GG_HL_NS, line_idx - 1, 0, {
+              end_row = line_idx,
+              hl_group = hl,
+              hl_eol = true,
+              priority = 5000,
+            })
+          end
+        end
+      end
+    end
+  end
+
+  vim.bo[buf].modifiable = was_modifiable
+end
+
 require("lazy").setup({
   {
     "catppuccin/nvim",
@@ -172,7 +400,9 @@ require("lazy").setup({
           end
           -- 明確記住覆蓋前的編輯器 buffer，供按 q 時精準還原
           vim.g.gitgraph_prev_buf = vim.api.nvim_get_current_buf()
-          require("gitgraph").draw({}, { all = true, max_count = 5000 })
+          gg_sync_preview_refs()
+          require("gitgraph").draw({}, { revision_range = GG_REVISION_RANGE, max_count = 5000 })
+          gg_style_preview_nodes()
         end,
         desc = "Git graph（提交樹狀圖）",
       },
@@ -588,9 +818,11 @@ end
 
 -- checkout 後刷新 gitgraph 圖與 gitsigns 的 git 狀態
 local function gg_refresh()
+  pcall(gg_sync_preview_refs)
   pcall(function()
-    require("gitgraph").draw({}, { all = true, max_count = 5000 })
+    require("gitgraph").draw({}, { revision_range = GG_REVISION_RANGE, max_count = 5000 })
   end)
+  pcall(gg_style_preview_nodes)
   pcall(function()
     require("gitsigns").refresh()
   end)
@@ -697,6 +929,7 @@ vim.api.nvim_create_autocmd("FileType", {
     end
     -- q：切回原本的 buffer（不關視窗，避免觸發 close_if_last_window 使 nvim 退出）
     map("q", function()
+      gg_cleanup_preview_refs() -- 離開圖之後把臨時 ref 清乾淨，避免殘留舊狀態
       local prev = vim.g.gitgraph_prev_buf
       if prev and vim.api.nvim_buf_is_valid(prev) then
         vim.cmd("buffer " .. prev)
