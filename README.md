@@ -44,7 +44,7 @@ bash ~/code/dotfiles/install.sh
 │ neo-tree │  bufferline 頂端分頁         │
 │ 側邊欄   │  編輯器                      │
 │ (左,全高)├─────────────────────────────┤
-│          │  toggleterm 底部終端機（claude）│
+│          │  toggleterm 底部終端機         │
 └──────────┴─────────────────────────────┘
 ```
 
@@ -52,7 +52,7 @@ bash ~/code/dotfiles/install.sh
 
 ### 導航快捷鍵（跨 nvim 視窗與 tmux pane）
 
-`vim-tmux-navigator` 把 nvim 視窗與 tmux pane 縫成同一套，用一組 `Ctrl+hjkl` 即可在側邊欄、編輯器、底部終端機（claude）之間移動：
+`vim-tmux-navigator` 把 nvim 視窗與 tmux pane 縫成同一套，用一組 `Ctrl+hjkl` 即可在側邊欄、編輯器、底部終端機之間移動：
 
 | 按鍵 | 動作 |
 |---|---|
@@ -111,6 +111,15 @@ Git 分頁（`<leader>2`）專屬：`ga` 暫存、`gu` 取消暫存、`gc` commi
 
 **退出**：diffview 在畫面內按 `q`（或 `:DiffviewClose`）；gitgraph 按 `q` 返回編輯器。
 
+**未提交的變更 / stash 預覽節點**：圖裡除了真正的 commit，還會多畫出兩種虛擬節點，跟真正的 commit 用不同符號和顏色區分：
+
+| 符號 | 顏色 | 代表 |
+|---|---|---|
+| `●` | 黃色 | 目前尚未 commit 的變更（staged + unstaged + untracked），永遠排在最上面／主線，訊息顯示變更的檔案數，例如「未提交的變更 (2)」 |
+| `◆` | 紫色 | stash 清單裡的每一筆，正確掛在它當初是從哪個 commit 建立的位置上，訊息格式「`stash: WIP on <分支>: <訊息> <hash> <時間>`」（訊息超過 24 字元會截斷加 `...`） |
+
+這兩種節點都能用 `Enter` 看 diff，跟真正的 commit 操作一致；`<leader>co`/`<leader>cb`/`<leader>gm` 則只對真正的 commit 有意義。開圖跟關圖（`q`）之間會自動同步/清理狀態，不用手動處理。
+
 ### 頂端 buffer 分頁（bufferline）
 
 開啟的檔案會排成頂端分頁（像 VSCode 的編輯器分頁），會自動幫 neo-tree 側邊欄留位不重疊：
@@ -124,13 +133,15 @@ Git 分頁（`<leader>2`）專屬：`ga` 暫存、`gu` 取消暫存、`gc` commi
 
 ### 底部終端機面板（toggleterm）
 
-編輯器下方有一個底部終端機面板（由 edgy 釘住），預設終端機是 **claude**：
+編輯器下方有一個底部終端機面板（由 edgy 釘住），**畫面上永遠只顯示一個終端機**（單一面板原則，開新的/切換都會自動隱藏其他已開的）：
 
 | 按鍵 | 動作 |
 |---|---|
 | `Ctrl+/` 或 `Ctrl+_` | 開關終端機面板（n / t / i 模式都能按） |
 
-終端機內按 `Ctrl+hjkl` 會跳出終端機模式並移到對應視窗（見上方導航章節）。快捷鍵提示顯示在畫面最下面的 tmux 狀態列（不佔用終端機面板自己的空間）。
+`Ctrl+/` 開關的對象是**最後使用的終端機**：預設是 `claude`，但只要透過 `Ctrl+t` 切換過其他終端機，之後 `Ctrl+/` 開關的就是那個，不會強制跳回 `claude`。
+
+終端機內按 `Ctrl+hjkl` 會跳出終端機模式並移到對應視窗（見上方導航章節）；沒有目標視窗可切（例如終端機在版面最下面/最右邊，往下/往右沒東西）時會留在終端機、可以直接繼續打字，不會卡在 Normal 模式。快捷鍵提示顯示在畫面最下面的 tmux 狀態列（不佔用終端機面板自己的空間）。
 
 ### 終端機清單面板（Ctrl+t，toggleterm-manager）
 
