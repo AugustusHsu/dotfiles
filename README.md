@@ -17,7 +17,7 @@
 ## 安裝
 
 ```bash
-git clone <此 repo 網址> ~/code/dotfiles
+git clone https://github.com/AugustusHsu/dotfiles.git ~/code/dotfiles
 bash ~/code/dotfiles/install.sh
 ```
 
