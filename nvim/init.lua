@@ -338,6 +338,11 @@ require("lazy").setup({
           -- 用 `nvim .` 開資料夾時直接接管成 neo-tree 左側欄
           -- （open_default = 開在預設位置＝左側欄；不要用 open_current，那會佔滿整個視窗）
           hijack_netrw_behavior = "open_default",
+          -- 預設顯示隱藏檔/目錄（neo-tree 預設會擋掉點開頭的檔案），
+          -- 側邊欄內的 H 還是可以手動切回隱藏
+          filtered_items = {
+            hide_dotfiles = false,
+          },
         },
         window = {
           position = "left",
