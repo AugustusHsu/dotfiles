@@ -10,6 +10,10 @@ if not vim.loop.fs_stat(lazypath) then
 end
 vim.opt.rtp:prepend(lazypath)
 
+-- 停用 netrw：改由 neo-tree 完全處理目錄，避免 `nvim .` 時 netrw 搶先顯示在編輯器
+vim.g.loaded_netrw = 1
+vim.g.loaded_netrwPlugin = 1
+
 vim.g.mapleader = " "
 
 require("lazy").setup({
@@ -27,9 +31,19 @@ require("lazy").setup({
     opts = {},
   },
   {
-    -- 統一 Ctrl+hjkl 導航：跨 nvim 視窗與 tmux pane（純 vimscript，相容 nvim 0.9）
+    -- 統一 Ctrl+hjkl 導航（normal 模式）：跨 nvim 視窗與 tmux pane
     "christoomey/vim-tmux-navigator",
     lazy = false,
+    init = function()
+      -- 停用外掛預設綁定，改由我們自己綁；避免它在終端機模式誤觸、把指令名稱當文字送進終端機
+      vim.g.tmux_navigator_no_mappings = 1
+    end,
+    config = function()
+      vim.keymap.set("n", "<C-h>", "<cmd>TmuxNavigateLeft<cr>", { desc = "移到左邊視窗/pane", silent = true })
+      vim.keymap.set("n", "<C-j>", "<cmd>TmuxNavigateDown<cr>", { desc = "移到下面視窗/pane", silent = true })
+      vim.keymap.set("n", "<C-k>", "<cmd>TmuxNavigateUp<cr>", { desc = "移到上面視窗/pane", silent = true })
+      vim.keymap.set("n", "<C-l>", "<cmd>TmuxNavigateRight<cr>", { desc = "移到右邊視窗/pane", silent = true })
+    end,
   },
   {
     "nvim-neo-tree/neo-tree.nvim",
@@ -247,33 +261,16 @@ require("lazy").setup({
         end,
       })
 
-      -- 終端機管理選單（一鍵涵蓋新增/切換/改名/關閉）
-      local function term_menu()
-        vim.ui.select(
-          { "新增終端機", "切換終端機", "重新命名終端機", "關閉目前終端機" },
-          { prompt = "終端機管理" },
-          function(choice)
-            if choice == "新增終端機" then
-              vim.cmd("TermNew direction=horizontal")
-            elseif choice == "切換終端機" then
-              vim.cmd("TermSelect")
-            elseif choice == "重新命名終端機" then
-              vim.cmd("ToggleTermSetName")
-            elseif choice == "關閉目前終端機" then
-              vim.cmd("bdelete!")
-            end
-          end
-        )
-      end
-
       -- Ctrl+/ 開關終端機面板（claude）；n + t + i 都能按
       -- （不用 <C-\>：它在終端機模式跟內建跳出鍵 <C-\><C-n> 衝突。<C-_> 是後備，
       --   有些終端機把 Ctrl+/ 送成 Ctrl+_）
       for _, key in ipairs({ "<C-/>", "<C-_>" }) do
         vim.keymap.set({ "n", "t", "i" }, key, function() claude:toggle() end, { desc = "開關終端機面板（claude）" })
       end
-      -- Ctrl+t 開管理選單
-      vim.keymap.set({ "n", "t" }, "<C-t>", function() term_menu() end, { desc = "終端機管理選單" })
+      -- Ctrl+t 開終端機清單面板（toggleterm-manager，見下方外掛）
+      -- 一定要傳 {}：open() 沒帶 opts 時內部傳 nil 給 telescope previewer 會報錯
+      vim.keymap.set("n", "<C-t>", function() require("toggleterm-manager").open({}) end, { desc = "終端機清單面板" })
+      vim.keymap.set("t", "<C-t>", [[<C-\><C-n><cmd>lua require('toggleterm-manager').open({})<cr>]], { desc = "終端機清單面板" })
       -- 終端機內用 Ctrl+hjkl 跳出終端機模式並移到對應視窗（不用 Esc）
       vim.keymap.set("t", "<C-h>", [[<C-\><C-n><C-w>h]], { desc = "移到左邊視窗" })
       vim.keymap.set("t", "<C-j>", [[<C-\><C-n><C-w>j]], { desc = "移到下面視窗" })
@@ -284,15 +281,22 @@ require("lazy").setup({
       vim.api.nvim_create_autocmd("TermOpen", {
         pattern = "term://*",
         callback = function()
-          vim.opt_local.statusline = "  C-/ 開關  ·  C-hjkl 移動  ·  C-t 管理選單  "
+          vim.opt_local.statusline = "  C-/ 開關  ·  C-hjkl 移動  ·  C-t 終端機清單  "
         end,
       })
 
-      -- 進入終端機時自動切 insert 模式：edgy 重新排版後可能停在 normal 模式，導致打不進去
+      -- 進入終端機時自動切 insert 模式：edgy 重新排版、或用 Ctrl+j 的 <cmd> 導航移進來時
+      -- 可能停在 normal 模式導致打不進去。用 vim.schedule 延到視窗切換完成後再 startinsert，
+      -- 否則同步呼叫會被導航流程之後的模式重置吃掉（停在 normal，需手動按 i）。
       vim.api.nvim_create_autocmd({ "BufEnter", "WinEnter", "TermOpen" }, {
         pattern = "term://*",
         callback = function()
-          vim.cmd("startinsert")
+          vim.schedule(function()
+            -- 只在焦點仍在終端機 buffer 時才 startinsert（排程期間焦點可能已移走）
+            if vim.bo.buftype == "terminal" then
+              vim.cmd("startinsert")
+            end
+          end)
         end,
       })
 
@@ -337,6 +341,85 @@ require("lazy").setup({
         },
       },
     },
+  },
+  {
+    -- 模糊搜尋框架（供 toggleterm-manager 用，之後也能做檔案/全文搜尋）
+    "nvim-telescope/telescope.nvim",
+    dependencies = { "nvim-lua/plenary.nvim" },
+    cmd = "Telescope",
+    config = function()
+      local t_actions = require("telescope.actions")
+      require("telescope").setup({
+        defaults = {
+          mappings = {
+            -- 跟整套 IDE 一致：Ctrl+j/k 移動選取（預設 C-k 會捲 Preview、C-j 沒綁）
+            i = {
+              ["<C-j>"] = t_actions.move_selection_next,
+              ["<C-k>"] = t_actions.move_selection_previous,
+            },
+          },
+        },
+      })
+    end,
+  },
+  {
+    -- 終端機清單面板（Ctrl+t 開）：列出所有終端機、右側預覽，可切換/新增/改名/刪除
+    "ryanmsnyder/toggleterm-manager.nvim",
+    dependencies = {
+      "akinsho/toggleterm.nvim",
+      "nvim-telescope/telescope.nvim",
+      "nvim-lua/plenary.nvim",
+    },
+    config = function()
+      local tm_actions = require("toggleterm-manager").actions
+      local t_actions = require("telescope.actions")
+      local t_state = require("telescope.actions.state")
+
+      -- VSCode 式「切換」：只顯示選中的終端機、隱藏其他已開啟的，並聚焦它。
+      -- 不用內建 toggle_term：它只單獨開/關選中的一個，導致（a）已開的再按會被關掉、
+      -- start_insert 反而落在編輯器上（編輯器變 insert）；（b）不會隱藏其他 → 兩個並排。
+      local function switch_to_selected(prompt_bufnr)
+        local selection = t_state.get_selected_entry()
+        if selection == nil then
+          return
+        end
+        local term = selection.value
+        t_actions.close(prompt_bufnr)
+        -- 底部單一面板：關掉其他開著的終端機，只留選中的
+        for _, t in ipairs(require("toggleterm.terminal").get_all(true)) do
+          if t.id ~= term.id and t:is_open() then
+            t:close()
+          end
+        end
+        if not term:is_open() then
+          term:open()
+        end
+        term:focus()
+        -- 聚焦終端機視窗後進 insert（延後避免被視窗切換的模式重置吃掉）
+        vim.schedule(function()
+          if vim.bo.buftype == "terminal" then
+            vim.cmd("startinsert")
+          end
+        end)
+      end
+
+      require("toggleterm-manager").setup({
+        mappings = {
+          i = {
+            ["<CR>"] = { action = switch_to_selected, exit_on_action = true },        -- 切換（隱藏其他）
+            ["<C-i>"] = { action = tm_actions.create_term, exit_on_action = false },  -- 新增
+            ["<C-r>"] = { action = tm_actions.rename_term, exit_on_action = false },  -- 改名
+            ["<C-d>"] = { action = tm_actions.delete_term, exit_on_action = false },  -- 刪除
+          },
+        },
+        -- 把快捷鍵說明直接顯示在面板標題上
+        titles = {
+          prompt = "↵切換  C-i新增  C-r改名  C-d刪除  C-jk選取",
+          results = "終端機清單",
+          preview = "預覽",
+        },
+      })
+    end,
   },
 })
 
