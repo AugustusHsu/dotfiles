@@ -271,11 +271,29 @@ require("lazy").setup({
       -- 一定要傳 {}：open() 沒帶 opts 時內部傳 nil 給 telescope previewer 會報錯
       vim.keymap.set("n", "<C-t>", function() require("toggleterm-manager").open({}) end, { desc = "終端機清單面板" })
       vim.keymap.set("t", "<C-t>", [[<C-\><C-n><cmd>lua require('toggleterm-manager').open({})<cr>]], { desc = "終端機清單面板" })
-      -- 終端機內用 Ctrl+hjkl 跳出終端機模式並移到對應視窗（不用 Esc）
-      vim.keymap.set("t", "<C-h>", [[<C-\><C-n><C-w>h]], { desc = "移到左邊視窗" })
-      vim.keymap.set("t", "<C-j>", [[<C-\><C-n><C-w>j]], { desc = "移到下面視窗" })
-      vim.keymap.set("t", "<C-k>", [[<C-\><C-n><C-w>k]], { desc = "移到上面視窗" })
-      vim.keymap.set("t", "<C-l>", [[<C-\><C-n><C-w>l]], { desc = "移到右邊視窗" })
+      -- 終端機內用 Ctrl+hjkl 移到對應視窗/pane（不用先手動跳出終端機模式）：
+      -- 用 TmuxNavigate* 而非純 <C-w>h，這樣 nvim 視窗沒有目標時會 fallback
+      -- 給 tmux pane（跟一般模式共用同一套 vim-tmux-navigator 邏輯）。
+      -- 但終端機是版面最下面/最右邊，往下（j）、往右（l）常常兩邊都沒有目標，
+      -- 這種「切不過去」的情況下停在原本的終端機視窗，就用 startinsert
+      -- 補回終端機模式，避免使用者被留在 Normal 模式、還要手動按 i 才能繼續打字。
+      local function term_navigate(direction)
+        return function()
+          local win_before = vim.api.nvim_get_current_win()
+          vim.cmd("TmuxNavigate" .. direction)
+          if vim.api.nvim_get_current_win() == win_before then
+            vim.schedule(function()
+              if vim.bo.buftype == "terminal" then
+                vim.cmd("startinsert")
+              end
+            end)
+          end
+        end
+      end
+      vim.keymap.set("t", "<C-h>", term_navigate("Left"), { desc = "移到左邊視窗/pane" })
+      vim.keymap.set("t", "<C-j>", term_navigate("Down"), { desc = "移到下面視窗/pane" })
+      vim.keymap.set("t", "<C-k>", term_navigate("Up"), { desc = "移到上面視窗/pane" })
+      vim.keymap.set("t", "<C-l>", term_navigate("Right"), { desc = "移到右邊視窗/pane" })
 
       -- 終端機視窗留白 statusline：不設的話 nvim 會用預設值顯示醜醜的
       -- term://~/code/dotfiles//12345:/bin/bash;#toggleterm#1 buffer 名稱。
