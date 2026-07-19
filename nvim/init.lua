@@ -435,6 +435,10 @@ require("lazy").setup({
             i = {
               ["<C-j>"] = t_actions.move_selection_next,
               ["<C-k>"] = t_actions.move_selection_previous,
+              -- telescope 預設 insert 模式的 <esc> 只會退到 normal 模式（還在面板
+              -- 裡），要再按一次 <esc>（normal 模式的預設綁定）才會真的關閉面板。
+              -- 這裡讓 insert 模式按一次 <esc> 就直接關閉，不用按兩次。
+              ["<esc>"] = t_actions.close,
             },
           },
         },
@@ -563,6 +567,13 @@ vim.opt.termguicolors = true
 vim.opt.signcolumn = "yes"
 -- edgy 建議：split 時保持畫面穩定
 vim.opt.splitkeep = "screen"
+-- Esc 按下去要延遲才生效：ttimeoutlen 沒設定時會退回用 timeoutlen（預設 1000ms）。
+-- 終端機的方向鍵/功能鍵也是用 ESC 開頭的跳脫序列送過來，nvim 收到單一 ESC 時
+-- 要等一小段時間確認後面是否還有更多 byte 才能判斷是不是完整的按鍵，這段等待
+-- 預設用 timeoutlen 那麼久，感覺起來就像 Esc 按了要等一下才生效。調小
+-- ttimeoutlen 讓這個判斷更快，同時保留 timeoutlen 給像 <leader>xx 這種
+-- 多鍵組合鍵的等待時間。
+vim.opt.ttimeoutlen = 10
 
 -- 取得 gitgraph 圖上游標所在的 commit（用 gitgraph 的公開 API）
 local function gg_commit_under_cursor()
