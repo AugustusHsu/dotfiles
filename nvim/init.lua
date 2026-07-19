@@ -48,6 +48,11 @@ local function force_edgy_relayout()
   end)
 end
 
+-- Ctrl+/ 開關的目標：預設是 claude，但只要透過 Ctrl+t 切換過其他終端機，
+-- 就記住那個「最後使用的終端機」，之後 Ctrl+/ 開關的對象改成它，而不是
+-- 永遠強制跳回 claude。等 toggleterm 的 config 跑過才會被賦值成 claude。
+local last_terminal = nil
+
 require("lazy").setup({
   {
     "catppuccin/nvim",
@@ -292,15 +297,34 @@ require("lazy").setup({
           end
         end,
       })
+      last_terminal = claude -- 預設開關對象是 claude，切換過其他終端機後會改掉
 
-      -- Ctrl+/ 開關終端機面板（claude）；n + t + i 都能按
+      -- Ctrl+/ 開關終端機面板；n + t + i 都能按
       -- （不用 <C-\>：它在終端機模式跟內建跳出鍵 <C-\><C-n> 衝突。<C-_> 是後備，
       --   有些終端機把 Ctrl+/ 送成 Ctrl+_）
+      --
+      -- 開關的對象是「最後使用的終端機」（last_terminal），不是永遠強制跳回
+      -- claude：預設是 claude，但只要透過 Ctrl+t 切換過其他終端機，
+      -- last_terminal 就會變成那個，Ctrl+/ 之後開關的就是它，回到上一個
+      -- 用的終端機，而不是每次都被拉回 claude。
+      --
+      -- 單一終端機面板原則：底部只該同時顯示一個終端機（跟 Ctrl+t 清單面板的
+      -- 切換 action 邏輯一致）。開啟前先把其他開著的終端機關掉，避免 toggleterm
+      -- 把它用分割視窗的方式擠進去，變成畫面上同時有兩個終端機。
       for _, key in ipairs({ "<C-/>", "<C-_>" }) do
         vim.keymap.set({ "n", "t", "i" }, key, function()
-          claude:toggle()
+          if last_terminal:is_open() then
+            last_terminal:close()
+          else
+            for _, t in ipairs(require("toggleterm.terminal").get_all(true)) do
+              if t.id ~= last_terminal.id and t:is_open() then
+                t:close()
+              end
+            end
+            last_terminal:open()
+          end
           force_edgy_relayout()
-        end, { desc = "開關終端機面板（claude）" })
+        end, { desc = "開關終端機面板（最後使用的終端機）" })
       end
       -- Ctrl+t 開終端機清單面板（toggleterm-manager，見下方外掛）
       -- 一定要傳 {}：open() 沒帶 opts 時內部傳 nil 給 telescope previewer 會報錯
@@ -450,6 +474,7 @@ require("lazy").setup({
           term:open()
         end
         term:focus()
+        last_terminal = term -- 記住這個是「最後使用的終端機」，Ctrl+/ 之後開關它
         -- 聚焦終端機視窗後進 insert（延後避免被視窗切換的模式重置吃掉）
         vim.schedule(function()
           if vim.bo.buftype == "terminal" then
@@ -459,13 +484,66 @@ require("lazy").setup({
         force_edgy_relayout()
       end
 
+      -- 找出目前哪個視窗顯示著指定 buffer 並聚焦它（不存在就不做事）
+      local function focus_win_with_buf(bufnr)
+        for _, win in ipairs(vim.api.nvim_list_wins()) do
+          if vim.api.nvim_win_get_buf(win) == bufnr then
+            vim.api.nvim_set_current_win(win)
+            return true
+          end
+        end
+        return false
+      end
+
+      -- 新增終端機：toggleterm-manager 內建的 create_term 只會單純開一個新終端機，
+      -- 不知道底部單一面板原則，如果原本就有終端機開著（例如 claude），新的會用
+      -- 分割視窗擠進去，變成背景看到兩個終端機並排。這裡在建立完之後，比對建立
+      -- 前後開著的終端機差異找出「剛建立的那一個」，關掉其他的只留它。
+      --
+      -- 關鍵：清理其他終端機時不能用 t:close()。toggleterm 的 Terminal:close()
+      -- 內部（ui.close → close_split）關掉分割視窗後，會無條件把焦點跳去一個
+      -- module 層級的「origin window」，而 create_term 自己內部的排程（把焦點
+      -- 送回 telescope 面板）剛好會把這個 origin window 設成「剛建立的新終端機」
+      -- 視窗——所以不管等多久才清理，關掉其他終端機都一定會把焦點劫走、跳去新
+      -- 終端機，導致直接跳出 telescope 面板。改用 nvim_win_close 直接關視窗，
+      -- 跳過這個會動到全域 origin window 的副作用。
+      local function create_term_single_panel(prompt_bufnr, exit_on_action)
+        local before = {}
+        for _, t in ipairs(require("toggleterm.terminal").get_all(true)) do
+          before[t.id] = true
+        end
+        tm_actions.create_term(prompt_bufnr, exit_on_action)
+        vim.schedule(function()
+          local terms = require("toggleterm.terminal").get_all(true)
+          local created
+          for _, t in ipairs(terms) do
+            if not before[t.id] then
+              created = t
+            end
+          end
+          if created then
+            for _, t in ipairs(terms) do
+              if t.id ~= created.id and t:is_open() and t.window then
+                pcall(vim.api.nvim_win_close, t.window, true)
+              end
+            end
+            last_terminal = created
+          end
+          -- 保險：清理完之後如果 telescope 面板還開著，確定焦點還在它上面
+          if vim.api.nvim_buf_is_valid(prompt_bufnr) then
+            focus_win_with_buf(prompt_bufnr)
+          end
+          force_edgy_relayout()
+        end)
+      end
+
       require("toggleterm-manager").setup({
         mappings = {
           i = {
-            ["<CR>"] = { action = switch_to_selected, exit_on_action = true },        -- 切換（隱藏其他）
-            ["<C-i>"] = { action = tm_actions.create_term, exit_on_action = false },  -- 新增
-            ["<C-r>"] = { action = tm_actions.rename_term, exit_on_action = false },  -- 改名
-            ["<C-d>"] = { action = tm_actions.delete_term, exit_on_action = false },  -- 刪除
+            ["<CR>"] = { action = switch_to_selected, exit_on_action = true },              -- 切換（隱藏其他）
+            ["<C-i>"] = { action = create_term_single_panel, exit_on_action = false },       -- 新增
+            ["<C-r>"] = { action = tm_actions.rename_term, exit_on_action = false },         -- 改名
+            ["<C-d>"] = { action = tm_actions.delete_term, exit_on_action = false },         -- 刪除
           },
         },
         -- 把快捷鍵說明直接顯示在面板標題上
