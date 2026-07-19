@@ -16,6 +16,38 @@ vim.g.loaded_netrwPlugin = 1
 
 vim.g.mapleader = " "
 
+-- 強制 edgy 重新計算版面寬高並整個重繪：edgy 只在「自己」偵測到的
+-- WinClosed/show/hide 時才會自動 require("edgy.layout").update()；
+-- 我們自己開關/切換終端機（claude:toggle()、toggleterm-manager 的
+-- 切換 action）不一定會經過那個路徑，導致 edgy 算出來的寬度沒更新、
+-- 編輯器或旁邊視窗畫面卡住要重開才會恢復。這些操作後手動補一次。
+--
+-- 光 redraw! 只會重畫 nvim 這邊「以為」的畫面，不會通知底層 pty/job
+-- 真正的尺寸已經變了。像 claude 這種自己畫 TUI 的 CLI，如果視窗在它
+-- 畫面畫出來之後才被 edgy 調整大小，它不一定會收到 resize 通知去重畫，
+-- 畫面就會卡在舊尺寸、留下一塊沒畫到的空白/黑色區域。這裡額外主動呼叫
+-- jobresize 用視窗「目前的實際大小」逼一次真正的 resize 通知。
+local function force_edgy_relayout()
+  vim.schedule(function()
+    pcall(function()
+      require("edgy.layout").update()
+    end)
+    vim.cmd("redraw!")
+    local ok, terms = pcall(function()
+      return require("toggleterm.terminal").get_all(true)
+    end)
+    if ok then
+      for _, term in ipairs(terms) do
+        if term.job_id and term.window and vim.api.nvim_win_is_valid(term.window) then
+          local width = vim.api.nvim_win_get_width(term.window)
+          local height = vim.api.nvim_win_get_height(term.window)
+          pcall(vim.fn.jobresize, term.job_id, width, height)
+        end
+      end
+    end
+  end)
+end
+
 require("lazy").setup({
   {
     "catppuccin/nvim",
@@ -265,7 +297,10 @@ require("lazy").setup({
       -- （不用 <C-\>：它在終端機模式跟內建跳出鍵 <C-\><C-n> 衝突。<C-_> 是後備，
       --   有些終端機把 Ctrl+/ 送成 Ctrl+_）
       for _, key in ipairs({ "<C-/>", "<C-_>" }) do
-        vim.keymap.set({ "n", "t", "i" }, key, function() claude:toggle() end, { desc = "開關終端機面板（claude）" })
+        vim.keymap.set({ "n", "t", "i" }, key, function()
+          claude:toggle()
+          force_edgy_relayout()
+        end, { desc = "開關終端機面板（claude）" })
       end
       -- Ctrl+t 開終端機清單面板（toggleterm-manager，見下方外掛）
       -- 一定要傳 {}：open() 沒帶 opts 時內部傳 nil 給 telescope previewer 會報錯
@@ -421,6 +456,7 @@ require("lazy").setup({
             vim.cmd("startinsert")
           end
         end)
+        force_edgy_relayout()
       end
 
       require("toggleterm-manager").setup({
