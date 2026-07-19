@@ -277,11 +277,13 @@ require("lazy").setup({
       vim.keymap.set("t", "<C-k>", [[<C-\><C-n><C-w>k]], { desc = "移到上面視窗" })
       vim.keymap.set("t", "<C-l>", [[<C-\><C-n><C-w>l]], { desc = "移到右邊視窗" })
 
-      -- 終端機底部提示（buffer-local statusline）
+      -- 終端機視窗留白 statusline：不設的話 nvim 會用預設值顯示醜醜的
+      -- term://~/code/dotfiles//12345:/bin/bash;#toggleterm#1 buffer 名稱。
+      -- 快捷鍵提示已經搬到 tmux 狀態列（見 tmux.conf），這裡不用重複顯示。
       vim.api.nvim_create_autocmd("TermOpen", {
         pattern = "term://*",
         callback = function()
-          vim.opt_local.statusline = "  C-/ 開關  ·  C-hjkl 移動  ·  C-t 終端機清單  "
+          vim.opt_local.statusline = " "
         end,
       })
 

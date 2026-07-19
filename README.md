@@ -57,9 +57,11 @@ bash ~/code/dotfiles/install.sh
 | 按鍵 | 動作 |
 |---|---|
 | `Ctrl+h/j/k/l` | 移到左/下/上/右的視窗或 pane |
-| `C-b z` | 縮放目前 pane |
+| `C-b z` | 縮放目前 pane（`ide` 預設只有單一 pane 塞滿整個 nvim，這個鍵沒有視覺效果；只有你自己手動 `C-b %`/`C-b "` 開額外 pane 時才有用） |
 | `C-b Q` | 關閉整個 ide（會跳確認） |
 | `C-b d` | Detach（session 留在背景） |
+
+tmux 狀態列（畫面最下面那一條）常駐顯示 `Ctrl+hjkl` 移動、`Q` 關閉、`d` 離開，以及底部終端機面板的 `C-/`（開關）、`C-t`（清單）；`C-b z` 因為預設情境下沒有視覺效果，不放進提示列。
 
 > 副作用：`Ctrl+l` 在 claude/shell pane 會變成「往右切」而非「清畫面」（統一導航攔了全域 Ctrl+l）。
 
@@ -128,7 +130,7 @@ Git 分頁（`<leader>2`）專屬：`ga` 暫存、`gu` 取消暫存、`gc` commi
 |---|---|
 | `Ctrl+/` 或 `Ctrl+_` | 開關終端機面板（n / t / i 模式都能按） |
 
-終端機內按 `Ctrl+hjkl` 會跳出終端機模式並移到對應視窗（見上方導航章節）。終端機底部有一行 statusline 提示常用快捷鍵。
+終端機內按 `Ctrl+hjkl` 會跳出終端機模式並移到對應視窗（見上方導航章節）。快捷鍵提示顯示在畫面最下面的 tmux 狀態列（不佔用終端機面板自己的空間）。
 
 ### 終端機清單面板（Ctrl+t，toggleterm-manager）
 
