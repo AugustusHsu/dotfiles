@@ -91,7 +91,11 @@ install_nvim() {
 # 中排在 apt 的 /usr/bin 前面，會自動蓋過去）；apt（Ubuntu 22.04 只有
 # 3.2a）版本太舊，沒有 allow-passthrough 等新選項，見 tmux/tmux.conf
 install_tmux() {
-  if command -v tmux >/dev/null 2>&1 && tmux -V 2>/dev/null | grep -q "$TMUX_VERSION"; then
+  # 守衛只認 $LOCAL_BIN 這一顆（跟 install_nvim 一致），不要用 command -v：
+  # command -v 會找到 PATH 上「任何」一顆 tmux，例如手動 sudo make install
+  # 裝到 /usr/local/bin 的那種。版本號剛好符合的話守衛就會直接 return，
+  # 這段編譯流程永遠不會執行，install.sh 也就永遠補不齊 ~/.local/bin/tmux。
+  if [ -x "$LOCAL_BIN/tmux" ] && "$LOCAL_BIN/tmux" -V 2>/dev/null | grep -q "$TMUX_VERSION"; then
     return
   fi
   echo "編譯安裝 tmux $TMUX_VERSION..."
