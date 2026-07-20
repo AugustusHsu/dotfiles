@@ -626,11 +626,14 @@ require("lazy").setup({
       end
       if launched_on_dir() then
         vim.schedule(function()
+          -- 啟動後焦點就留在 claude（可直接開始下指令，不用先按 Ctrl+j）。
+          -- 原本這裡開完 claude 會再排一個 wincmd k 想把焦點移回編輯器，
+          -- 但實測從啟動後第一個可觀測的時間點起，焦點就一直在終端機上，
+          -- 那行 wincmd k 從來沒有生效過（claude 的 on_open 之後還會
+          -- term:send()，焦點會回到終端機）。既然實際行為一直是停在
+          -- claude、使用起來也符合需求，就拿掉那行不生效的程式碼，
+          -- 讓程式碼與實際行為一致。
           claude:open()
-          -- 開完 claude 後把焦點移回編輯器（不要一啟動就卡在終端機）
-          vim.schedule(function()
-            vim.cmd("wincmd k")
-          end)
         end)
       end
     end,
