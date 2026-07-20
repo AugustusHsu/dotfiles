@@ -16,6 +16,10 @@ ide() {
     # 空白的 shell、卻沒有任何錯誤訊息。nvim 結束後 exec bash 是為了
     # 離開 nvim 後仍掉回可用的 shell，而不是直接把 session 關掉。
     tmux new-session -d -s "$session" -x "$(tput cols)" -y "$(tput lines)" -c "$PWD" -n main 'nvim . ; exec bash'
+    # 存成 session 專屬的 user option，讓 tmux.conf 的 set-titles-string 組出
+    # 終端機視窗標題「ide:<資料夾名稱>」。用真正的資料夾名稱（不是拿去算
+    # session 名稱、被 tr . _ 處理過的版本），標題才會跟資料夾本身一致。
+    tmux set-option -t "$session" @ide_folder "$(basename "$PWD")"
   fi
   tmux attach -t "$session"
 }
