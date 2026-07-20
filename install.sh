@@ -25,6 +25,8 @@ declare -A APT_PACKAGE=(
   [bison]=bison              # 以下三個是編譯 tmux 用
   [make]=build-essential
   [pkg-config]=pkg-config
+  [xclip]=xclip              # Ghostty/Claude Code 讀寫系統剪貼簿要靠它（X11）；
+                              # 沒裝的話終端機貼上剪貼簿內容（含圖片）會完全不動作
 )
 
 # 沒有對應可執行檔的 apt 相依套件（tmux 編譯用的開發函式庫），改用 dpkg -s 檢查

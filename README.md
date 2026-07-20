@@ -25,7 +25,7 @@ bash ~/code/dotfiles/install.sh
 
 1. 檢查相依套件是否已安裝，缺少會列出安裝指令並中止：
    - `ghostty`——**不在 apt 套件庫，是 snap 套件**，提示的指令是 `sudo snap install ghostty --classic`
-   - apt 套件：`git`、`curl`、`xz-utils`、`fontconfig`、`bison`、`build-essential`、`pkg-config`、`libevent-dev`、`libncurses-dev`
+   - apt 套件：`git`、`curl`、`xz-utils`、`fontconfig`、`bison`、`build-essential`、`pkg-config`、`libevent-dev`、`libncurses-dev`、`xclip`
 2. 安裝 `JetBrainsMono Nerd Font`（鎖定版本，供 neo-tree 圖示用）
 3. 安裝 `Neovim`（鎖定版本，官方 AppImage 裝到 `~/.local/bin`，不走 apt——apt 只有過舊的 0.9.5）
 4. 安裝 `tmux`（鎖定版本，原始碼編譯裝到 `~/.local/bin`，不走 apt——Ubuntu 22.04 apt 只有 3.2a，缺 `allow-passthrough` 等新選項）
@@ -43,6 +43,8 @@ bash ~/code/dotfiles/install.sh
 > tmux 是 client/server 架構：升級後如果背景還有舊版啟動的 server 在跑，client 版本號會顯示新的，但實際設定跟功能還是舊 server 的。若遇到新設定選項噴 `invalid option`，先確認是不是要 `tmux kill-server` 重啟 server（會清空所有現有 session，記得先保留要留的工作）。
 
 > `sudo apt install` 需要互動輸入密碼，若在沒有 TTY 的環境（例如透過 Claude Code 執行）會失敗，需自行在終端機手動執行。
+
+> `xclip` 是終端機讀寫系統剪貼簿（含貼上圖片給 Claude Code）的必要條件，但不是充分條件：Ghostty 目前的 OSC 52 剪貼簿協定只能傳文字，不支援圖片二進位資料；即使裝了 `xclip`，圖片貼上能不能動仍取決於當時用的工具（Claude Code CLI）在 Linux 上的剪貼簿支援程度。
 
 ## `ide` 指令
 
