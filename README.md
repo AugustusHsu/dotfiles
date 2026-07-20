@@ -7,7 +7,7 @@
 | 路徑 | 內容 |
 |---|---|
 | `ghostty/config.ghostty` | 字體、主題、視窗留白、游標樣式 |
-| `tmux/tmux.conf` | Shift+Enter 相容設定、狀態列提示、Ctrl+hjkl 導航綁定 |
+| `tmux/tmux.conf` | Shift+Enter 相容設定、Esc 延遲調校、狀態列提示、Ctrl+hjkl 導航與 `Q` 關閉綁定 |
 | `nvim/init.lua` | Neovim 設定（lazy.nvim + neo-tree + vim-tmux-navigator + catppuccin） |
 | `nvim/lazy-lock.json` | Neovim 外掛版本鎖定檔，見下方「更新外掛」 |
 | `bash/ide.sh` | `ide()` 函式，依目錄自動建立/接回 tmux session |
@@ -29,7 +29,7 @@ bash ~/code/dotfiles/install.sh
 2. 安裝 `JetBrainsMono Nerd Font`（鎖定版本，供 neo-tree 圖示用）
 3. 安裝 `Neovim`（鎖定版本，官方 AppImage 裝到 `~/.local/bin`，不走 apt——apt 只有過舊的 0.9.5）
 4. 安裝 `tmux`（鎖定版本，原始碼編譯裝到 `~/.local/bin`，不走 apt——Ubuntu 22.04 apt 只有 3.2a，缺 `allow-passthrough` 等新選項）
-5. 把設定檔 symlink 到對應位置（`~/.config/ghostty`、`~/.tmux.conf`、`~/.config/nvim`）
+5. 把設定檔 symlink 到對應位置（`~/.config/ghostty/config.ghostty`、`~/.tmux.conf`、`~/.config/nvim/init.lua`、`~/.config/nvim/lazy-lock.json`）
 6. 在 `~/.bashrc` 加入 `ide()` 函式的載入
 7. 套用 GNOME 工作區快捷鍵設定
 8. 依 `lazy-lock.json` 還原 Neovim 外掛到鎖定的版本
@@ -46,7 +46,7 @@ bash ~/code/dotfiles/install.sh
 
 ## `ide` 指令
 
-在任一專案目錄下執行 `ide`，會建立（或接回）一個以目錄名稱命名的 tmux session，裡面單一 `nvim .` 全螢幕——IDE 的所有面板（檔案樹、編輯器、git、底部終端機）都在 nvim 內部：
+在任一專案目錄下執行 `ide`，會建立（或接回）一個對應該目錄的 tmux session，裡面單一 `nvim .` 全螢幕——IDE 的所有面板（檔案樹、編輯器、git、底部終端機）都在 nvim 內部：
 
 ```
 ┌──────────┬─────────────────────────────┐
@@ -57,7 +57,7 @@ bash ~/code/dotfiles/install.sh
 └──────────┴─────────────────────────────┘
 ```
 
-同一目錄重複執行會接回既有 session（Claude 對話與編輯狀態都會保留）。
+同一目錄重複執行會接回既有 session（Claude 對話與編輯狀態都會保留）。session 名稱是「目錄名稱 + 完整路徑的短 hash」，所以不同路徑下的同名目錄（例如兩個專案各有一個 `backend/`）不會互相撞名接錯 session。
 
 ### 導航快捷鍵（跨 nvim 視窗與 tmux pane）
 
