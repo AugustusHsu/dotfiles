@@ -8,8 +8,14 @@ ide() {
   if ! tmux has-session -t "$session" 2>/dev/null; then
     # 單一 nvim 全螢幕；neo-tree/編輯器/claude 終端機都在 nvim 內部（toggleterm + edgy）
     # tmux 只當最外層保 session（detach/reattach）
-    tmux new-session -d -s "$session" -x "$(tput cols)" -y "$(tput lines)" -c "$PWD" -n main
-    tmux send-keys -t "$session:main" 'nvim .' C-m
+    #
+    # 直接把 'nvim . ; exec bash' 當成 pane 的啟動指令，而不是用
+    # send-keys 模擬打字送進去：send-keys 在 session 剛建立、pane
+    # 還沒準備好接收輸入時有 race condition，一旦被其他輸入（例如
+    # 滑鼠滾輪誤觸 copy-mode）搶先，指令會被無聲吞掉，畫面就會卡在
+    # 空白的 shell、卻沒有任何錯誤訊息。nvim 結束後 exec bash 是為了
+    # 離開 nvim 後仍掉回可用的 shell，而不是直接把 session 關掉。
+    tmux new-session -d -s "$session" -x "$(tput cols)" -y "$(tput lines)" -c "$PWD" -n main 'nvim . ; exec bash'
   fi
   tmux attach -t "$session"
 }
