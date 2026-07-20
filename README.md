@@ -36,6 +36,10 @@ bash ~/code/dotfiles/install.sh
 
 版本全部鎖定（`install.sh` 頂端的 `NVIM_VERSION` / `NERD_FONT_VERSION` / `TMUX_VERSION` + `lazy-lock.json`），確保每台機器裝到一致的版本。
 
+> repo 路徑由 `install.sh` 從自己的位置推導，clone 到 `~/code/dotfiles` 以外的地方也能正常運作。
+>
+> 若目標位置已經有同名的設定檔（例如既有的 `~/.tmux.conf`）：repo 裡還沒收錄這份設定時會把它搬進 repo 納入版控；repo 裡已經有了則**不會覆蓋 repo 版本**，而是把機器上的原檔備份成 `.bak` 再建立 symlink。
+
 > tmux 是 client/server 架構：升級後如果背景還有舊版啟動的 server 在跑，client 版本號會顯示新的，但實際設定跟功能還是舊 server 的。若遇到新設定選項噴 `invalid option`，先確認是不是要 `tmux kill-server` 重啟 server（會清空所有現有 session，記得先保留要留的工作）。
 
 > `sudo apt install` 需要互動輸入密碼，若在沒有 TTY 的環境（例如透過 Claude Code 執行）會失敗，需自行在終端機手動執行。

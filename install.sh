@@ -1,7 +1,10 @@
 #!/bin/bash
 set -e
 
-DOTFILES="$HOME/code/dotfiles"
+# 從腳本自己的位置推導 repo 路徑，不要寫死 ~/code/dotfiles：clone 到其他位置、
+# 或用相對路徑執行時一樣正確。先 readlink -f 解開軟連結，否則透過指向這支腳本的
+# 軟連結呼叫時，算出來的會是軟連結所在的目錄而不是 repo 目錄。
+DOTFILES="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 LOCAL_BIN="$HOME/.local/bin"
 
 # ============================================================
@@ -113,12 +116,28 @@ install_tmux() {
   rm -rf "$tmp"
 }
 
-# 把設定檔 symlink 到定位；若目標是既有的真實檔案，先搬進 repo 再建 symlink
+# 把設定檔 symlink 到定位。
+#
+# 目標位置已經是 symlink → 直接覆蓋重連即可。
+# 目標位置是「真實檔案」時分兩種情況，不能一律搬進 repo：
+#   - repo 裡還沒有這份設定 → 搬進 repo（首次把機器上既有的設定收進版控）
+#   - repo 裡已經有了 → **絕對不能搬**，那會用這台機器的舊檔覆蓋掉 repo 版本，
+#     等於在任何已有設定的新機器上跑 install.sh 都會弄髒/丟失 repo 的內容。
+#     改成把機器上既有的檔案備份起來再建 symlink，兩邊內容都不會消失。
 link() {
   local src="$1" dst="$2"
   mkdir -p "$(dirname "$dst")"
   if [ -e "$dst" ] && [ ! -L "$dst" ]; then
-    mv "$dst" "$src"
+    if [ -e "$src" ]; then
+      local backup="$dst.bak"
+      # 已經有 .bak 就加時間戳記，不要蓋掉上一次的備份
+      [ -e "$backup" ] && backup="$dst.bak.$(date +%Y%m%d%H%M%S)"
+      mv "$dst" "$backup"
+      echo "  $dst 已存在且 repo 也有同名設定，原檔備份為 $backup"
+    else
+      mv "$dst" "$src"
+      echo "  $dst 是既有設定且 repo 尚未收錄，已搬進 repo：$src"
+    fi
   fi
   ln -sf "$src" "$dst"
 }
