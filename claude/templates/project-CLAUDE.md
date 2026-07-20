@@ -66,6 +66,39 @@
 
 段落沒內容就整段刪掉，不要留空標題。
 
+## 順便問：這個專案有文檔資料夾嗎？
+
+若有（`docs/`、`doc/`、`spec/` 之類），**不要把文檔內容搬進 CLAUDE.md 或記憶庫**——
+那會把一次性的檢索需求變成每次請求的常駐成本。正確做法是在 CLAUDE.md 裡寫**導航規則**，
+讓 Claude 知道怎麼「按需精準取用」：
+
+1. 文檔根目錄在哪、有沒有索引檔（`DOCS_MAP.md`、`README.md`）——**先讀索引，不要盲目掃目錄**。
+2. 命名慣例，讓 Claude 能直接組出路徑而不用搜尋。
+   例：`features/<模組>/{prd,hld,lld,api_spec,test_plan}.md`、工單在 `features/<模組>/tasks/<ID>.md`。
+3. **標出大檔**（>20KB）並下規則：**用 `grep -n` 定位段落再局部讀，禁止整份載入**。
+   一份 68KB 的 prd.md 讀進來約 2 萬 tokens，而且之後每一輪都要重付。
+4. 哪些目錄**不要**主動讀（產生物、封存、大量重複的工單）。
+
+寫成三到五行的「文檔導航」段落即可，不要複製目錄樹。
+
+## 順便檢查 MCP scope
+
+寫專案 CLAUDE.md 時（`/init` 也算），一併回報這個專案的 MCP 狀態：
+
+1. 跑 `claude mcp list`，列出這個專案目前載入哪些 MCP、各自是什麼 scope。
+2. **如果有 user scope 的伺服器就明確提出來**——user scope 會在「每一個專案」載入工具定義，
+   除非那個工具真的每個專案都要用，否則應該改成 project scope。
+3. 建議這個專案該用的 scope，預設推薦 **`--scope project`**（寫進 repo 的 `.mcp.json`）：
+   - `local` 存在 `~/.claude.json`，**不納入版控**，換機器會消失
+   - `project` 存在 repo 的 `.mcp.json`，跟著 git 走，新機器 clone 就有
+   - `user` 全域載入——只有真正跨專案都要用的工具才考慮
+4. 列出 `~/code/dotfiles/claude/mcp-servers.json` 裡已記錄的伺服器供參考
+   （那份清單只放全域必要的；專案專屬的應該放該專案的 `.mcp.json`）。
+5. 密鑰一律用 `${VAR}` 展開，實際的值放 `~/.config/claude-secrets.env`，不要寫進 `.mcp.json`。
+
+裝任何 MCP 前先問：**它的工具定義每次請求都要載入，帶來的價值大於這個固定成本嗎？**
+特別留意跟內建功能重疊的（filesystem、git 這類 Claude Code 本來就會做的事）——那是純成本。
+
 ## 寫完後
 
 回報這份 CLAUDE.md 的大概 token 數，讓我判斷值不值得。
