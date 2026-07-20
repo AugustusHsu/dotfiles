@@ -8,6 +8,20 @@
 |---|---|---|
 | `settings.json` | Claude Code 的偏好設定（主題、通知等） | symlink 到 `~/.claude/settings.json` |
 | `mcp-servers.json` | MCP 伺服器清單 | `install.sh` 依此執行 `claude mcp add-json`（user scope） |
+| `CLAUDE.md` | 全域工作慣例（跨專案，每次請求都在 context 裡） | symlink 到 `~/.claude/CLAUDE.md` |
+| `templates/project-CLAUDE.md` | 建立專案 CLAUDE.md 的模板與取捨原則 | symlink 到 `~/.claude/templates/project-CLAUDE.md` |
+
+## CLAUDE.md 的兩層與成本
+
+| | 路徑 | 何時載入 |
+|---|---|---|
+| **全域** | `~/.claude/CLAUDE.md` | 每個專案、每一次請求 |
+| **專案** | `<專案>/CLAUDE.md` | 該專案的每一次請求 |
+| **模板** | `~/.claude/templates/project-CLAUDE.md` | 只在 `/init` 或寫專案 CLAUDE.md 時讀取 |
+
+**這兩份 CLAUDE.md 的每個字，在一個 session 裡會被重複計費 N 次**（N = 該 session 的請求數）。所以模板刻意**不**寫進全域 CLAUDE.md——全域只留一行指標，要用的時候才去讀那份 2.5KB 的模板，省下每次請求都揹著它的成本。
+
+新增內容前先問：「不寫這條，Claude 會不會做錯事？」不會就別寫。
 
 ## 刻意**不**納入版控的東西
 

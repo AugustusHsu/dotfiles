@@ -150,6 +150,8 @@ link_configs() {
   link "$DOTFILES/nvim/init.lua" "$HOME/.config/nvim/init.lua"
   link "$DOTFILES/nvim/lazy-lock.json" "$HOME/.config/nvim/lazy-lock.json"
   link "$DOTFILES/claude/settings.json" "$HOME/.claude/settings.json"
+  link "$DOTFILES/claude/CLAUDE.md" "$HOME/.claude/CLAUDE.md"
+  link "$DOTFILES/claude/templates/project-CLAUDE.md" "$HOME/.claude/templates/project-CLAUDE.md"
 
   grep -qxF "source $DOTFILES/bash/ide.sh" "$HOME/.bashrc" || \
     echo "source $DOTFILES/bash/ide.sh" >> "$HOME/.bashrc"
