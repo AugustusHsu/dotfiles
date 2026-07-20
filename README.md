@@ -23,7 +23,9 @@ bash ~/code/dotfiles/install.sh
 
 `install.sh` 會做的事：
 
-1. 檢查 apt 相依套件（`ghostty`、`tree`、`git`、`curl`、`bison`、`build-essential`、`pkg-config`、`libevent-dev`、`libncurses-dev`）是否已安裝，缺少會列出 `sudo apt install` 指令並中止
+1. 檢查相依套件是否已安裝，缺少會列出安裝指令並中止：
+   - `ghostty`——**不在 apt 套件庫，是 snap 套件**，提示的指令是 `sudo snap install ghostty --classic`
+   - apt 套件：`git`、`curl`、`xz-utils`、`fontconfig`、`bison`、`build-essential`、`pkg-config`、`libevent-dev`、`libncurses-dev`
 2. 安裝 `JetBrainsMono Nerd Font`（鎖定版本，供 neo-tree 圖示用）
 3. 安裝 `Neovim`（鎖定版本，官方 AppImage 裝到 `~/.local/bin`，不走 apt——apt 只有過舊的 0.9.5）
 4. 安裝 `tmux`（鎖定版本，原始碼編譯裝到 `~/.local/bin`，不走 apt——Ubuntu 22.04 apt 只有 3.2a，缺 `allow-passthrough` 等新選項）
