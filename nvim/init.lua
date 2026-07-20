@@ -647,6 +647,11 @@ require("lazy").setup({
       -- 終端機視窗留白 statusline：不設的話 nvim 會用預設值顯示醜醜的
       -- term://~/code/dotfiles//12345:/bin/bash;#toggleterm#1 buffer 名稱。
       -- 快捷鍵提示已經搬到 tmux 狀態列（見 tmux.conf），這裡不用重複顯示。
+      --
+      -- 這一列沒辦法真的消失：nvim 的 laststatus 是全域設定，沒有「只關掉
+      -- 這個視窗」的選項；laststatus=3（全部視窗共用一條）試過，但會把
+      -- 編輯器自己的 statusline 也搬走、位置跟著變，不是要的效果，已還原。
+      -- 空白只是視覺上盡量不顯眼，不是佔用空間的解法。
       vim.api.nvim_create_autocmd("TermOpen", {
         pattern = "term://*",
         callback = function()

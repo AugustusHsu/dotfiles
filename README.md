@@ -69,7 +69,7 @@ bash ~/code/dotfiles/install.sh
 |---|---|
 | `Ctrl+h/j/k/l` | 移到左/下/上/右的視窗或 pane |
 | `C-b z` | 縮放目前 pane（`ide` 預設只有單一 pane 塞滿整個 nvim，這個鍵沒有視覺效果；只有你自己手動 `C-b %`/`C-b "` 開額外 pane 時才有用） |
-| `C-b Q` | 關閉整個 ide（會跳確認） |
+| `C-b Q` | 關閉整個 ide（按下去直接關，不會跳確認） |
 | `C-b d` | Detach（session 留在背景） |
 
 tmux 狀態列（畫面最下面那一條）常駐顯示 `Ctrl+hjkl` 移動、`Q` 關閉、`d` 離開，以及底部終端機面板的 `C-/`（開關）、`C-t`（清單）；`C-b z` 因為預設情境下沒有視覺效果，不放進提示列。
