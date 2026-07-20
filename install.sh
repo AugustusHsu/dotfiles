@@ -21,6 +21,7 @@ declare -A APT_PACKAGE=(
   [curl]=curl                # 下載字型/nvim/tmux
   [xz]=xz-utils              # 解壓字型的 .tar.xz
   [fc-list]=fontconfig       # 安裝字型後更新快取（fc-list/fc-cache）
+  [python3]=python3          # 讀 claude/mcp-servers.json（見 restore_mcp_servers）
   [bison]=bison              # 以下三個是編譯 tmux 用
   [make]=build-essential
   [pkg-config]=pkg-config
@@ -148,6 +149,7 @@ link_configs() {
   link "$DOTFILES/tmux/tmux.conf" "$HOME/.tmux.conf"
   link "$DOTFILES/nvim/init.lua" "$HOME/.config/nvim/init.lua"
   link "$DOTFILES/nvim/lazy-lock.json" "$HOME/.config/nvim/lazy-lock.json"
+  link "$DOTFILES/claude/settings.json" "$HOME/.claude/settings.json"
 
   grep -qxF "source $DOTFILES/bash/ide.sh" "$HOME/.bashrc" || \
     echo "source $DOTFILES/bash/ide.sh" >> "$HOME/.bashrc"
@@ -157,6 +159,47 @@ link_configs() {
 restore_nvim_plugins() {
   echo "還原 Neovim 外掛版本（lazy-lock.json）..."
   "$LOCAL_BIN/nvim" --headless -c "lua require('lazy').restore({ wait = true })" -c "qa" 2>&1
+}
+
+# 依 claude/mcp-servers.json 還原 MCP 伺服器（user scope，跨專案都吃得到）。
+# claude CLI 不一定裝在這台機器上（dotfiles 本身不負責裝它），沒有就略過，
+# 不要讓整個 install.sh 中止。已經存在的同名伺服器也跳過，重跑不會出錯。
+restore_mcp_servers() {
+  local file="$DOTFILES/claude/mcp-servers.json"
+  [ -f "$file" ] || return 0
+  if ! command -v claude >/dev/null 2>&1; then
+    echo "找不到 claude CLI，略過 MCP 伺服器還原"
+    return 0
+  fi
+
+  local names existing
+  names=$(python3 -c "
+import json
+print('\n'.join(json.load(open('$file')).get('mcpServers', {})))
+")
+  [ -z "$names" ] && return 0
+
+  existing=$(claude mcp list 2>/dev/null || true)
+  echo "還原 MCP 伺服器（claude/mcp-servers.json）..."
+  local name def
+  while IFS= read -r name; do
+    [ -z "$name" ] && continue
+    if printf '%s' "$existing" | grep -q "^$name\b"; then
+      echo "  $name 已存在，略過"
+      continue
+    fi
+    def=$(python3 -c "
+import json
+print(json.dumps(json.load(open('$file'))['mcpServers']['$name']))
+")
+    # 失敗不要讓整個 install.sh 中止（主流程有 set -e）：MCP 還原是加值步驟，
+    # 單一伺服器加不進去時印出訊息繼續跑就好
+    if claude mcp add-json --scope user "$name" "$def" >/dev/null 2>&1; then
+      echo "  已加入 $name"
+    else
+      echo "  ⚠ $name 加入失敗，請稍後手動確認：claude mcp add-json --scope user $name '<json>'"
+    fi
+  done <<< "$names"
 }
 
 # ============================================================
@@ -169,5 +212,6 @@ install_tmux
 link_configs
 bash "$DOTFILES/gnome/keybindings.sh"
 restore_nvim_plugins
+restore_mcp_servers
 
 echo "install.sh 完成"

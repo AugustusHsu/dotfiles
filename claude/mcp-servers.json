@@ -1,0 +1,11 @@
+{
+  "_comment": [
+    "納入版控的 MCP 伺服器清單，install.sh 會依這份檔案在新機器上還原（user scope）。",
+    "格式與 `claude mcp add-json` 相同，每個項目就是一個標準的 MCP server 定義。",
+    "",
+    "⚠️ 絕對不要把 API key／token 的『值』寫進這個檔案——這個 repo 會推上 GitHub。",
+    "需要密鑰的伺服器，env 裡只寫變數名稱的參照（例如 \"${FOO_API_KEY}\"），",
+    "實際的值放在不納入版控的 ~/.config/claude-secrets.env（見 README 的說明）。"
+  ],
+  "mcpServers": {}
+}
