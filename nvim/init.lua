@@ -53,6 +53,23 @@ end
 -- 永遠強制跳回 claude。等 toggleterm 的 config 跑過才會被賦值成 claude。
 local last_terminal = nil
 
+-- Alt+Z 縮放終端機面板：開一個蓋滿整個畫面的浮動視窗顯示終端機 buffer，
+-- 不是 nil 就代表目前處於「放大」狀態。用浮動視窗而不是直接關掉編輯器/
+-- 側邊欄視窗，是因為 edgy 對「main 區域視窗全部消失、只剩邊欄視窗」有
+-- 自己的保護機制，一偵測到就會反過來把邊欄（含終端機）也關掉、生一個
+-- 空 buffer 收拾殘局——實測會直接把終端機關掉、卡住恢復不了。浮動視窗
+-- 完全不動 edgy 管理的版面，底下真正的終端機視窗全程都在，只是被蓋住。
+local zoom_float_win = nil
+
+-- 開關/切換/新增終端機（C-/、toggleterm-manager 的切換/新增）都要呼叫
+-- 這個，確保縮放狀態不會殘留到下一個顯示出來的終端機上。
+local function close_terminal_zoom()
+  if zoom_float_win and vim.api.nvim_win_is_valid(zoom_float_win) then
+    vim.api.nvim_win_close(zoom_float_win, false)
+  end
+  zoom_float_win = nil
+end
+
 -- gitgraph 圖裡顯示「尚未 commit 的變更」跟「全部 stash」用的臨時 ref 命名空間。
 -- 放在 refs/heads、refs/tags 之外的自訂命名空間，git branch/git tag 都看不到，
 -- 但 git log --all 還是抓得到（--all 涵蓋 refs/ 底下所有 ref，不限 heads/tags）。
@@ -548,6 +565,7 @@ require("lazy").setup({
       -- 把它用分割視窗的方式擠進去，變成畫面上同時有兩個終端機。
       for _, key in ipairs({ "<C-/>", "<C-_>" }) do
         vim.keymap.set({ "n", "t", "i" }, key, function()
+          close_terminal_zoom() -- 開關動作一律視為「回到正常大小」，避免縮放狀態殘留
           if last_terminal:is_open() then
             last_terminal:close()
           else
@@ -561,6 +579,43 @@ require("lazy").setup({
           force_edgy_relayout()
         end, { desc = "開關終端機面板（最後使用的終端機）" })
       end
+      -- Alt+Z 縮放/還原終端機面板。選 Alt 而不是 Ctrl 組合鍵是因為：
+      -- Ctrl+Z 在終端機裡是內建的 job control（暫停前景程式，SIGTSTP），
+      -- Ctrl+\ 會跟 nvim 終端機模式內建跳出鍵 <C-\><C-n> 衝突（Ctrl+t 的
+      -- 實作本身就是靠送出這個序列，見下方），兩個都不能用。
+      --
+      -- 用蓋滿整個畫面的浮動視窗顯示同一個終端機 buffer（見上方
+      -- close_terminal_zoom() 旁的說明：曾經試過直接關掉編輯器/側邊欄視窗，
+      -- 但會被 edgy 的保護機制連終端機一起關掉、卡住恢復不了）。
+      local function toggle_terminal_zoom()
+        if not last_terminal:is_open() or not last_terminal.window or not vim.api.nvim_win_is_valid(last_terminal.window) then
+          vim.notify("目前沒有開啟中的終端機可以縮放", vim.log.levels.WARN)
+          return
+        end
+        if zoom_float_win and vim.api.nvim_win_is_valid(zoom_float_win) then
+          close_terminal_zoom()
+          if vim.api.nvim_win_is_valid(last_terminal.window) then
+            vim.api.nvim_set_current_win(last_terminal.window)
+          end
+        else
+          zoom_float_win = vim.api.nvim_open_win(last_terminal.bufnr, true, {
+            relative = "editor",
+            row = 0,
+            col = 0,
+            width = vim.o.columns,
+            height = vim.o.lines - vim.o.cmdheight - 1, -- 扣掉 nvim 自己的 cmdline/statusline
+            style = "minimal",
+            border = "none",
+            zindex = 50,
+          })
+        end
+        vim.schedule(function()
+          if vim.bo.buftype == "terminal" then
+            vim.cmd("startinsert")
+          end
+        end)
+      end
+      vim.keymap.set({ "n", "t", "i" }, "<M-z>", toggle_terminal_zoom, { desc = "縮放/還原終端機面板（浮動視窗蓋滿畫面）" })
       -- Ctrl+t 開終端機清單面板（toggleterm-manager，見下方外掛）
       -- 一定要傳 {}：open() 沒帶 opts 時內部傳 nil 給 telescope previewer 會報錯
       vim.keymap.set("n", "<C-t>", function() require("toggleterm-manager").open({}) end, { desc = "終端機清單面板" })
@@ -704,6 +759,7 @@ require("lazy").setup({
         if selection == nil then
           return
         end
+        close_terminal_zoom() -- 切換終端機一律視為「回到正常大小」
         local term = selection.value
         t_actions.close(prompt_bufnr)
         -- 底部單一面板：關掉其他開著的終端機，只留選中的
@@ -750,6 +806,7 @@ require("lazy").setup({
       -- 終端機，導致直接跳出 telescope 面板。改用 nvim_win_close 直接關視窗，
       -- 跳過這個會動到全域 origin window 的副作用。
       local function create_term_single_panel(prompt_bufnr, exit_on_action)
+        close_terminal_zoom() -- 新增終端機一律視為「回到正常大小」
         local before = {}
         for _, t in ipairs(require("toggleterm.terminal").get_all(true)) do
           before[t.id] = true
