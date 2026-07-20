@@ -23,15 +23,18 @@ bash ~/code/dotfiles/install.sh
 
 `install.sh` 會做的事：
 
-1. 檢查 apt 相依套件（`ghostty`、`tmux`、`tree`、`git`、`curl`）是否已安裝，缺少會列出 `sudo apt install` 指令並中止
+1. 檢查 apt 相依套件（`ghostty`、`tree`、`git`、`curl`、`bison`、`build-essential`、`pkg-config`、`libevent-dev`、`libncurses-dev`）是否已安裝，缺少會列出 `sudo apt install` 指令並中止
 2. 安裝 `JetBrainsMono Nerd Font`（鎖定版本，供 neo-tree 圖示用）
 3. 安裝 `Neovim`（鎖定版本，官方 AppImage 裝到 `~/.local/bin`，不走 apt——apt 只有過舊的 0.9.5）
-4. 把設定檔 symlink 到對應位置（`~/.config/ghostty`、`~/.tmux.conf`、`~/.config/nvim`）
-5. 在 `~/.bashrc` 加入 `ide()` 函式的載入
-6. 套用 GNOME 工作區快捷鍵設定
-7. 依 `lazy-lock.json` 還原 Neovim 外掛到鎖定的版本
+4. 安裝 `tmux`（鎖定版本，原始碼編譯裝到 `~/.local/bin`，不走 apt——Ubuntu 22.04 apt 只有 3.2a，缺 `allow-passthrough` 等新選項）
+5. 把設定檔 symlink 到對應位置（`~/.config/ghostty`、`~/.tmux.conf`、`~/.config/nvim`）
+6. 在 `~/.bashrc` 加入 `ide()` 函式的載入
+7. 套用 GNOME 工作區快捷鍵設定
+8. 依 `lazy-lock.json` 還原 Neovim 外掛到鎖定的版本
 
-版本全部鎖定（`install.sh` 頂端的 `NVIM_VERSION` / `NERD_FONT_VERSION` + `lazy-lock.json`），確保每台機器裝到一致的版本。
+版本全部鎖定（`install.sh` 頂端的 `NVIM_VERSION` / `NERD_FONT_VERSION` / `TMUX_VERSION` + `lazy-lock.json`），確保每台機器裝到一致的版本。
+
+> tmux 是 client/server 架構：升級後如果背景還有舊版啟動的 server 在跑，client 版本號會顯示新的，但實際設定跟功能還是舊 server 的。若遇到新設定選項噴 `invalid option`，先確認是不是要 `tmux kill-server` 重啟 server（會清空所有現有 session，記得先保留要留的工作）。
 
 > `sudo apt install` 需要互動輸入密碼，若在沒有 TTY 的環境（例如透過 Claude Code 執行）會失敗，需自行在終端機手動執行。
 

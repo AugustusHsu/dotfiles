@@ -9,16 +9,22 @@ LOCAL_BIN="$HOME/.local/bin"
 # ============================================================
 NVIM_VERSION="v0.12.4"       # Neovim（AppImage，見 install_nvim）
 NERD_FONT_VERSION="v3.4.0"   # JetBrainsMono Nerd Font（見 install_nerd_font）
+TMUX_VERSION="3.7b"          # tmux（原始碼編譯，見 install_tmux；apt 版本太舊，缺 allow-passthrough 等選項）
 # Neovim 外掛的版本鎖定在 nvim/lazy-lock.json（見主流程最後的 lazy restore）
 
-# 走 apt 的相依套件（需自行安裝，缺少會中止並提示）
+# 走 apt 的相依套件（需自行安裝，缺少會中止並提示）：有對應可執行檔的用 command -v 檢查
 declare -A APT_PACKAGE=(
   [ghostty]=ghostty
-  [tmux]=tmux
   [tree]=tree
   [git]=git
   [curl]=curl
+  [bison]=bison
+  [make]=build-essential
+  [pkg-config]=pkg-config
 )
+
+# 沒有對應可執行檔的 apt 相依套件（tmux 編譯用的開發函式庫），改用 dpkg -s 檢查
+APT_LIB_PACKAGES=(libevent-dev libncurses-dev)
 
 # ============================================================
 # 函式定義
@@ -29,6 +35,9 @@ check_deps() {
   local missing=()
   for cmd in "${!APT_PACKAGE[@]}"; do
     command -v "$cmd" >/dev/null 2>&1 || missing+=("${APT_PACKAGE[$cmd]}")
+  done
+  for pkg in "${APT_LIB_PACKAGES[@]}"; do
+    dpkg -s "$pkg" >/dev/null 2>&1 || missing+=("$pkg")
   done
   if [ ${#missing[@]} -gt 0 ]; then
     echo "缺少以下套件，請先手動安裝後再重跑 install.sh："
@@ -66,6 +75,28 @@ install_nvim() {
   ln -sf nvim.appimage "$LOCAL_BIN/nvim"
 }
 
+# 原始碼編譯鎖定版本的 tmux 到 ~/.local/bin（不需 sudo，$LOCAL_BIN 在 PATH
+# 中排在 apt 的 /usr/bin 前面，會自動蓋過去）；apt（Ubuntu 22.04 只有
+# 3.2a）版本太舊，沒有 allow-passthrough 等新選項，見 tmux/tmux.conf
+install_tmux() {
+  if command -v tmux >/dev/null 2>&1 && tmux -V 2>/dev/null | grep -q "$TMUX_VERSION"; then
+    return
+  fi
+  echo "編譯安裝 tmux $TMUX_VERSION..."
+  local tmp
+  tmp=$(mktemp -d)
+  curl -sL -o "$tmp/tmux.tar.gz" \
+    "https://github.com/tmux/tmux/releases/download/$TMUX_VERSION/tmux-$TMUX_VERSION.tar.gz"
+  tar -xzf "$tmp/tmux.tar.gz" -C "$tmp"
+  (
+    cd "$tmp/tmux-$TMUX_VERSION"
+    ./configure --prefix="$HOME/.local" >/dev/null
+    make -j"$(nproc)" >/dev/null
+    make install >/dev/null
+  )
+  rm -rf "$tmp"
+}
+
 # 把設定檔 symlink 到定位；若目標是既有的真實檔案，先搬進 repo 再建 symlink
 link() {
   local src="$1" dst="$2"
@@ -99,6 +130,7 @@ restore_nvim_plugins() {
 check_deps
 install_nerd_font
 install_nvim
+install_tmux
 link_configs
 bash "$DOTFILES/gnome/keybindings.sh"
 restore_nvim_plugins
