@@ -1,6 +1,8 @@
 {
+  "effortLevel": "high",
   "theme": "dark",
+  "remoteControlAtStartup": true,
   "inputNeededNotifEnabled": true,
   "agentPushNotifEnabled": true,
-  "remoteControlAtStartup": true
+  "model": "sonnet"
 }
