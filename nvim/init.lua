@@ -568,6 +568,30 @@ require("lazy").setup({
       vim.keymap.set("n", "<leader>bp", "<cmd>BufferLinePick<cr>", { desc = "選取分頁（顯示字母跳）", silent = true })
       vim.keymap.set("n", "<leader>bd", close_current_buffer, { desc = "關閉目前 buffer", silent = true })
       vim.keymap.set("n", "<leader>bo", "<cmd>BufferLineCloseOthers<cr>", { desc = "關閉其他 buffer", silent = true })
+
+      -- 啟動時的空 [No Name] buffer 是 buflisted，開檔後不會被 :edit 取代，
+      -- 會一直殘留在分頁列上關不掉。開真正的檔案時把「無名字、未修改、空內容、
+      -- 且沒顯示在任何視窗」的 buffer 清掉，讓它自動消失。
+      vim.api.nvim_create_autocmd("BufReadPost", {
+        callback = function()
+          vim.schedule(function()
+            for _, b in ipairs(vim.api.nvim_list_bufs()) do
+              if
+                vim.api.nvim_buf_is_valid(b)
+                and vim.bo[b].buflisted
+                and vim.bo[b].buftype == ""
+                and vim.api.nvim_buf_get_name(b) == ""
+                and not vim.bo[b].modified
+                and vim.fn.bufwinnr(b) == -1
+                and vim.api.nvim_buf_line_count(b) == 1
+                and vim.api.nvim_buf_get_lines(b, 0, 1, false)[1] == ""
+              then
+                pcall(vim.api.nvim_buf_delete, b, {})
+              end
+            end
+          end)
+        end,
+      })
     end,
   },
   {
