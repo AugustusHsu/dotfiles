@@ -468,8 +468,12 @@ require("lazy").setup({
           if vim.bo.filetype == "neo-tree" then
             vim.cmd("wincmd l")
           end
-          -- 明確記住覆蓋前的編輯器 buffer，供按 q 時精準還原
-          vim.g.gitgraph_prev_buf = vim.api.nvim_get_current_buf()
+          -- 明確記住覆蓋前的編輯器 buffer，供按 q 時精準還原；
+          -- 若已在 gitgraph 圖上再按一次，不能把 prev_buf 覆蓋成圖自己，
+          -- 否則按 q 會原地跳回 gitgraph 而退不出去
+          if vim.bo.filetype ~= "gitgraph" then
+            vim.g.gitgraph_prev_buf = vim.api.nvim_get_current_buf()
+          end
           gg_sync_preview_refs()
           require("gitgraph").draw({}, { revision_range = GG_REVISION_RANGE, max_count = 5000 })
           gg_style_preview_nodes()
